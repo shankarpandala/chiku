@@ -1,0 +1,46 @@
+/* Prototype chrome + kid-screen styles, ported from the Claude Design helmet blocks. */
+html, body { margin: 0; height: 100%; }
+#root { min-height: 100%; }
+
+/* Buttons must inherit the surrounding typeface: kid frames set 'Baloo 2' on the
+   frame div and the grown-up strip sets Archivo, both meant to reach the labels. */
+button { font: inherit; }
+
+*:focus-visible { outline: 3px solid var(--color-accent); outline-offset: 3px; }
+.kid *:focus-visible { outline: 5px solid #2f8f86; outline-offset: 4px; }
+a { color: var(--color-accent-700); text-decoration: underline; }
+a:hover { color: var(--color-accent); }
+
+@keyframes chConfetti { 0% { transform: translateY(0) scale(.4); opacity: 0 } 25% { opacity: 1 } 100% { transform: translateY(-120px) scale(1) rotate(140deg); opacity: 0 } }
+@keyframes chPulse { 0%, 100% { transform: scale(1); opacity: .9 } 50% { transform: scale(1.09); opacity: .35 } }
+@keyframes chBob { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-8px) } }
+@keyframes chBarUp { 0%, 100% { transform: scaleY(.3) } 50% { transform: scaleY(1) } }
+@keyframes chSweep { 0% { transform: translateX(-100%) } 100% { transform: translateX(100%) } }
+
+/* ChikuFace character animations */
+@keyframes chikuRing { 0% { transform: scale(1); opacity: .85 } 50% { transform: scale(1.045); opacity: .35 } 100% { transform: scale(1); opacity: .85 } }
+@keyframes chikuSpin { to { transform: rotate(360deg) } }
+@keyframes chikuBar { 0%, 100% { transform: scaleY(.35) } 50% { transform: scaleY(1) } }
+@keyframes chikuBlink { 0%, 92%, 100% { transform: scaleY(1) } 96% { transform: scaleY(.08) } }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important } }
+.no-motion * { animation: none !important }
+
+/* Hover styles ported from dc-runtime's style-hover attributes; the runtime
+   injected these with !important so they beat the inline base styles. */
+.hov-nav:hover { background: var(--color-accent-100) !important }
+.hov-parent:hover { background: #ecd9ba !important }
+.hov-card:hover { transform: translateY(-3px) !important }
+.hov-cta:hover { background: #f5b459 !important }
+.hov-back:hover { background: #fdf6ec !important }
+.hov-chip:hover { transform: translateY(-2px) !important }
+.hov-end:hover { background: #ef939a !important }
+.hov-rc:hover { background: #f5e7d0 !important }
+
+/* The prototype toggles `is-active` on .seg-opt buttons; Modernist only ships
+   the :has(input:checked) variant of this appearance, so mirror it here. The
+   :hover companion must out-specify Modernist's :not(:has(input:checked)):hover,
+   which otherwise greys out the active option on inputless button segments. */
+.seg-opt { border: none; background: transparent; cursor: pointer; }
+.seg-opt.is-active,
+.seg .seg-opt.is-active:hover { background: var(--color-accent); color: var(--color-bg); }
