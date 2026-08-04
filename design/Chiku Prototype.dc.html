@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-cac67243-34a3-4e5b-bbca-b4b455dfa3f4/styles.css">
+<script src="_ds/modernist-cac67243-34a3-4e5b-bbca-b4b455dfa3f4/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Baloo+Tammudu+2:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%}
+*:focus-visible{outline:3px solid var(--color-accent);outline-offset:3px}
+.kid *:focus-visible{outline:5px solid #2f8f86;outline-offset:4px}
+a{color:var(--color-accent-700);text-decoration:underline}
+a:hover{color:var(--color-accent)}
+@keyframes chConfetti{0%{transform:translateY(0) scale(.4);opacity:0}25%{opacity:1}100%{transform:translateY(-120px) scale(1) rotate(140deg);opacity:0}}
+@keyframes chPulse{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.09);opacity:.35}}
+@keyframes chBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes chBarUp{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+@keyframes chSweep{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+.no-motion *{animation:none !important}
+</style>
+</helmet>
+
+<div class="{{ rootClass }}" style="display:flex;min-height:100vh;background:var(--color-bg);font-family:var(--font-body);color:var(--color-text)">
+
+  <nav style="width:264px;flex:0 0 264px;border-right:2px solid var(--color-divider);background:#fff;position:sticky;top:0;height:100vh;overflow:auto;padding:24px 0">
+    <div style="padding:0 20px 18px">
+      <div style="font-family:var(--font-heading);font-weight:700;font-size:20px;letter-spacing:-.02em">Chiku</div>
+      <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700);margin-top:4px">The show that hears you</div>
+      <div style="font-size:12px;color:var(--color-neutral-600);margin-top:10px">Prototype v0.1 — 6 screens + deliverables</div>
+    </div>
+    <div style="height:2px;background:var(--color-divider)"></div>
+    <sc-for list="{{ navGroups }}" as="grp" hint-placeholder-count="2">
+      <div style="padding:18px 0 6px">
+        <div style="padding:0 20px 8px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-neutral-600)">{{ grp.label }}</div>
+        <sc-for list="{{ grp.items }}" as="it" hint-placeholder-count="6">
+          <button onClick="{{ it.go }}" style="{{ it.style }}" style-hover="background:var(--color-accent-100)">
+            <span style="font-size:11px;width:20px;flex:0 0 20px;color:var(--color-neutral-600)">{{ it.num }}</span>
+            <span>{{ it.label }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </sc-for>
+    <div style="height:2px;background:var(--color-divider);margin-top:12px"></div>
+    <div style="padding:16px 20px;font-size:12px;line-height:1.5;color:var(--color-neutral-700)">
+      Grown-up chrome is Modernist. Kid screens use the Chiku palette and rounded 64px+ targets — see <span style="color:var(--color-accent-700)">Design System</span> for why.
+    </div>
+  </nav>
+
+  <main style="flex:1;min-width:0;padding:32px 40px 96px">
+    <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px;padding-bottom:14px;border-bottom:2px solid var(--color-divider)">
+      <div>
+        <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-700)">{{ scrKicker }}</div>
+        <h1 style="font-family:var(--font-heading);font-size:38px;line-height:1.05;margin:6px 0 0;letter-spacing:-.025em">{{ scrTitle }}</h1>
+      </div>
+      <p style="max-width:44ch;font-size:14px;line-height:1.55;margin:0;color:var(--color-neutral-700)">{{ scrNote }}</p>
+    </header>
+
+    <!-- ═══ KID HOME ═══ -->
+    <sc-if value="{{ isHome }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:40px;padding-top:32px;flex-wrap:wrap">
+        <div class="kid" style="width:390px;flex:0 0 390px;height:800px;border:2px solid var(--color-text);background:#fdf6ec;overflow:hidden;position:relative;font-family:'Baloo 2',system-ui">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px 6px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:56px;height:56px"><dc-import name="ChikuFace" crop="head" emote="idle" hint-size="56px,56px"></dc-import></div>
+              <div>
+                <div style="font-size:26px;font-weight:800;color:#7d6da3;line-height:1">Chiku</div>
+                <div style="font-family:'Baloo Tammudu 2',serif;font-size:15px;color:#a293c4;line-height:1.1">చికు</div>
+              </div>
+            </div>
+            <button onClick="{{ goParent }}" title="Grown-ups" style="width:64px;height:64px;border-radius:32px;border:none;background:#f5e7d0;display:grid;place-items:center;cursor:pointer" style-hover="background:#ecd9ba">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#7d6da3" stroke-width="2.2" stroke-linecap="round"><path d="M12 2a5 5 0 100 10 5 5 0 000-10"></path><path d="M3 22c0-4.4 4-8 9-8s9 3.6 9 8"></path></svg>
+            </button>
+          </div>
+
+          <div style="padding:8px 20px 0;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <sc-for list="{{ episodes }}" as="ep" hint-placeholder-count="4">
+              <button onClick="{{ ep.open }}" style="{{ ep.cardStyle }}" style-hover="transform:translateY(-3px)">
+                <div style="height:104px;border-radius:20px;background:{{ ep.bg }};position:relative;overflow:hidden;display:grid;place-items:center">
+                  <div style="{{ ep.motif }}"></div>
+                  <div style="{{ ep.motif2 }}"></div>
+                </div>
+                <div style="padding:10px 4px 0;text-align:left">
+                  <div style="font-size:17px;font-weight:700;color:#2c2a35;line-height:1.15">{{ ep.title }}</div>
+                  <div style="font-family:'Baloo Tammudu 2',serif;font-size:13px;color:#7d6da3;line-height:1.3;margin-top:2px">{{ ep.te }}</div>
+                </div>
+                <div style="position:absolute;top:12px;right:12px;width:44px;height:44px;border-radius:22px;background:#fdf6ec;display:grid;place-items:center;box-shadow:0 2px 0 rgba(44,42,53,.12)">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#7d6da3"><path d="M6 3l16 9-16 9z"></path></svg>
+                </div>
+              </button>
+            </sc-for>
+          </div>
+
+          <div style="position:absolute;left:20px;right:20px;bottom:22px">
+            <button onClick="{{ goCall }}" style="width:100%;height:104px;border:none;border-radius:30px;background:#f0a33c;display:flex;align-items:center;gap:16px;padding:0 20px;cursor:pointer;box-shadow:0 5px 0 #d1832a" style-hover="background:#f5b459">
+              <div style="width:72px;height:72px;flex:0 0 72px;border-radius:36px;background:#fdf6ec;display:grid;place-items:center;overflow:hidden">
+                <div style="width:66px;height:66px;transform:translateY(3px)"><dc-import name="ChikuFace" crop="head" emote="goodbye" hint-size="66px,66px"></dc-import></div>
+              </div>
+              <div style="text-align:left">
+                <div style="font-size:24px;font-weight:800;color:#2c2a35;line-height:1.05">Call Chiku</div>
+                <div style="font-family:'Baloo Tammudu 2',serif;font-size:15px;color:#5d4a20">చికుకి కాల్ చేయి</div>
+              </div>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#2c2a35" stroke-width="2.4" stroke-linecap="round" style="margin-left:auto"><path d="M4 5c0 8 7 15 15 15l2-4-5-2-2 2c-2-1-5-4-6-6l2-2-2-5z"></path></svg>
+            </button>
+            <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-top:12px">
+              <div style="width:10px;height:10px;border-radius:5px;background:#2f8f86"></div>
+              <div style="font-size:13px;color:#7d6da3">Today's call is ready · ఇవాళ్టి కాల్ సిద్ధం</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="flex:1;min-width:280px;max-width:520px">
+          <sc-for list="{{ homeNotes }}" as="n" hint-placeholder-count="4">
+            <div style="padding:16px 0;border-bottom:2px solid var(--color-divider)">
+              <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">{{ n.k }}</div>
+              <div style="font-size:15px;line-height:1.55;margin-top:6px">{{ n.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══ EPISODE PLAYER ═══ -->
+    <sc-if value="{{ isPlayer }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:24px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding-bottom:24px">
+          <span style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-neutral-600);margin-right:6px">Checkpoint state</span>
+          <sc-for list="{{ cpSteps }}" as="s" hint-placeholder-count="5">
+            <button onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</button>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;gap:40px;flex-wrap:wrap">
+          <div class="kid" style="width:390px;flex:0 0 390px;height:800px;border:2px solid var(--color-text);background:#2c2a35;overflow:hidden;position:relative;font-family:'Baloo 2',system-ui">
+            <div style="position:absolute;inset:0;background:linear-gradient(#6aa84f22,#2c2a35),#3b3746"></div>
+            <div style="position:absolute;top:0;left:0;right:0;height:56%;background:#4a5c3f;display:grid;place-items:center">
+              <div style="text-align:center;color:#cbd8c0;font-size:13px;letter-spacing:.1em;text-transform:uppercase">Episode video<br><span style="opacity:.7;text-transform:none;letter-spacing:0">Colours at the Market</span></div>
+            </div>
+
+            <div style="position:absolute;top:16px;left:16px;right:16px;display:flex;align-items:center;gap:12px">
+              <button onClick="{{ goHome }}" style="width:64px;height:64px;border-radius:32px;border:none;background:#fdf6ecdd;display:grid;place-items:center;cursor:pointer" style-hover="background:#fdf6ec">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#2c2a35" stroke-width="2.6" stroke-linecap="round"><path d="M4 12h16M4 12l6-6M4 12l6 6"></path></svg>
+              </button>
+              <div style="margin-left:auto">{{ sunMoon }}</div>
+            </div>
+
+            <sc-if value="{{ cpMic }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;inset:0;background:#2c2a35e8;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:32px;text-align:center">
+                <div style="width:150px;height:150px;border-radius:75px;background:#2f8f86;display:grid;place-items:center;position:relative">
+                  <div style="position:absolute;inset:-14px;border-radius:89px;border:5px solid #2f8f86;animation:chPulse 1.8s ease-in-out infinite"></div>
+                  <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="#fdf6ec" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a3.4 3.4 0 013.4 3.4v4.8a3.4 3.4 0 01-6.8 0V6.9A3.4 3.4 0 0112 3.5z"></path><path d="M5.8 11.2a6.2 6.2 0 0012.4 0"></path><path d="M12 17.4V21M8.6 21h6.8"></path></svg>
+                </div>
+                <div style="color:#fdf6ec;font-size:26px;font-weight:700;line-height:1.2">Chiku wants to hear you!</div>
+                <div style="font-family:'Baloo Tammudu 2',serif;color:#cdc3e4;font-size:17px">చికు మీ మాట వినాలనుకుంటున్నాడు</div>
+                <button onClick="{{ cpToAsk }}" style="height:88px;padding:0 40px;border:none;border-radius:26px;background:#f0a33c;font-family:'Baloo 2';font-size:24px;font-weight:800;color:#2c2a35;cursor:pointer;box-shadow:0 5px 0 #d1832a">Turn on the ears</button>
+                <div style="color:#a293c4;font-size:13px;font-family:var(--font-body)">A grown-up taps this once. Nothing is recorded or stored.</div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ cpOverlay }}" hint-placeholder-val="{{ true }}">
+              <div style="position:absolute;left:0;right:0;bottom:0;top:46%;background:#fdf6ec;border-radius:36px 36px 0 0;padding:20px;display:flex;flex-direction:column">
+                <div style="display:flex;gap:16px;align-items:flex-start">
+                  <div style="width:132px;height:132px;flex:0 0 132px;position:relative;{{ chikuBob }}">
+                    <dc-import name="ChikuFace" emote="{{ cpEmote }}" viseme="{{ cpViseme }}" ring="{{ cpRing }}" bars="{{ false }}" crop="head" hint-size="132px,132px"></dc-import>
+                  </div>
+                  <div style="padding-top:6px">
+                    <div style="{{ statePillStyle }}">
+                      {{ stateIcon }}
+                      <span style="font-size:15px;font-weight:700;letter-spacing:.02em">{{ stateLabel }}</span>
+                    </div>
+                    <div style="font-size:23px;font-weight:700;color:#2c2a35;line-height:1.2;margin-top:12px">{{ cpLine }}</div>
+                    <div style="font-family:'Baloo Tammudu 2',serif;font-size:16px;color:#7d6da3;line-height:1.35;margin-top:3px">{{ cpLineTe }}</div>
+                  </div>
+                </div>
+
+                <sc-if value="{{ cpListening }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;align-items:flex-end;gap:9px;height:56px;justify-content:center;margin:18px 0 4px">
+                    <div style="width:12px;height:100%;border-radius:6px;background:#2f8f86;animation:chBarUp .9s ease-in-out infinite"></div>
+                    <div style="width:12px;height:100%;border-radius:6px;background:#2f8f86;animation:chBarUp .9s ease-in-out infinite;animation-delay:.12s"></div>
+                    <div style="width:12px;height:100%;border-radius:6px;background:#2f8f86;animation:chBarUp .9s ease-in-out infinite;animation-delay:.24s"></div>
+                    <div style="width:12px;height:100%;border-radius:6px;background:#2f8f86;animation:chBarUp .9s ease-in-out infinite;animation-delay:.36s"></div>
+                    <div style="width:12px;height:100%;border-radius:6px;background:#2f8f86;animation:chBarUp .9s ease-in-out infinite;animation-delay:.48s"></div>
+                    <div style="width:12px;height:100%;border-radius:6px;background:#2f8f86;animation:chBarUp .9s ease-in-out infinite;animation-delay:.6s"></div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ cpCelebrate }}" hint-placeholder-val="{{ false }}">
+                  <div style="position:relative;height:56px;margin:14px 0 0">
+                    <sc-for list="{{ confetti }}" as="c" hint-placeholder-count="8">
+                      <div style="{{ c.style }}"></div>
+                    </sc-for>
+                    <div style="position:absolute;inset:0;display:grid;place-items:center;font-size:19px;font-weight:700;color:#2f8f86">{{ cpReward }}</div>
+                  </div>
+                </sc-if>
+
+                <div style="margin-top:auto">
+                  <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a293c4;font-family:var(--font-body);margin-bottom:8px">{{ chipsHint }}</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+                    <sc-for list="{{ chips }}" as="ch" hint-placeholder-count="3">
+                      <button onClick="{{ ch.pick }}" style="{{ ch.style }}" style-hover="transform:translateY(-2px)">
+                        <div style="width:100%;height:64px;border-radius:18px;background:{{ ch.bg }};display:grid;place-items:center">
+                          <div style="{{ ch.shape }}"></div>
+                        </div>
+                        <div style="font-size:15px;font-weight:700;color:#2c2a35;margin-top:6px">{{ ch.label }}</div>
+                      </button>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+
+          <div style="flex:1;min-width:300px;max-width:540px">
+            <sc-for list="{{ cpNotes }}" as="n" hint-placeholder-count="4">
+              <div style="padding:16px 0;border-bottom:2px solid var(--color-divider)">
+                <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">{{ n.k }}</div>
+                <div style="font-size:15px;line-height:1.55;margin-top:6px">{{ n.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══ CALL CHIKU ═══ -->
+    <sc-if value="{{ isCall }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:24px">
+        <div style="display:flex;gap:10px;align-items:center;padding-bottom:24px">
+          <span style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-neutral-600);margin-right:6px">Call state</span>
+          <sc-for list="{{ callSteps }}" as="s" hint-placeholder-count="3">
+            <button onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</button>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:40px;flex-wrap:wrap">
+          <div class="kid" style="width:390px;flex:0 0 390px;height:800px;border:2px solid var(--color-text);background:#fdf6ec;overflow:hidden;position:relative;font-family:'Baloo 2',system-ui">
+            <div style="position:absolute;inset:0;background:radial-gradient(120% 70% at 50% 22%, #f5e7d0 0%, #fdf6ec 60%)"></div>
+            <div style="position:absolute;top:18px;left:20px;right:20px;display:flex;align-items:center;justify-content:space-between">
+              <div style="{{ statePillStyle }}">
+                {{ stateIcon }}
+                <span style="font-size:15px;font-weight:700">{{ stateLabel }}</span>
+              </div>
+              {{ sunMoon }}
+            </div>
+            <button onClick="{{ toggleCall }}" style="position:absolute;left:0;right:0;top:110px;bottom:190px;border:none;background:transparent;cursor:pointer;display:grid;place-items:center">
+              <div style="width:330px;height:440px;{{ chikuBob }}">
+                <dc-import name="ChikuFace" emote="{{ callEmote }}" viseme="{{ callViseme }}" show-body="{{ true }}" ring="{{ callRing }}" hint-size="330px,440px"></dc-import>
+              </div>
+            </button>
+            <div style="position:absolute;left:20px;right:20px;bottom:26px;display:flex;flex-direction:column;align-items:center;gap:16px">
+              <div style="font-size:20px;font-weight:700;color:#7d6da3;text-align:center;line-height:1.25">{{ callLine }}</div>
+              <button onClick="{{ endCall }}" style="width:112px;height:112px;border-radius:56px;border:none;background:#e9848c;display:grid;place-items:center;cursor:pointer;box-shadow:0 5px 0 #c96a72" style-hover="background:#ef939a">
+                <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#fdf6ec" stroke-width="2.2" stroke-linecap="round"><path d="M8 11c0-4 8-4 8 0M4 15l3-1 1-3M20 15l-3-1-1-3M3 19h18"></path></svg>
+              </button>
+              <div style="font-size:14px;color:#a293c4">Wave goodbye · టాటా చెప్పు</div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:300px;max-width:540px">
+            <sc-for list="{{ callNotes }}" as="n" hint-placeholder-count="4">
+              <div style="padding:16px 0;border-bottom:2px solid var(--color-divider)">
+                <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">{{ n.k }}</div>
+                <div style="font-size:15px;line-height:1.55;margin-top:6px">{{ n.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══ TV STAGE ═══ -->
+    <sc-if value="{{ isTv }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:24px">
+        <div style="display:flex;gap:10px;align-items:center;padding-bottom:24px">
+          <span style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-neutral-600);margin-right:6px">TV mode</span>
+          <sc-for list="{{ tvSteps }}" as="s" hint-placeholder-count="2">
+            <button onClick="{{ s.go }}" style="{{ s.style }}">{{ s.label }}</button>
+          </sc-for>
+        </div>
+
+        <div style="width:100%;max-width:1180px;container-type:inline-size">
+        <div class="kid" style="width:100%;aspect-ratio:16/9;border:2px solid var(--color-text);background:#231f2e;position:relative;overflow:hidden;font-family:'Baloo 2',system-ui;font-size:1.25cqw">
+          <sc-if value="{{ tvPlayer }}" hint-placeholder-val="{{ true }}">
+            <div style="position:absolute;inset:0;display:grid;grid-template-columns:1.1fr .9fr">
+              <div style="background:#4a5c3f;display:grid;place-items:center;color:#cbd8c0;font-size:1em;letter-spacing:.12em;text-transform:uppercase">Episode video</div>
+              <div style="background:#fdf6ec;display:flex;flex-direction:column;padding:2.75em 2.75em 2.75em">
+                <div style="display:flex;align-items:center;gap:1.4em">
+                  <div style="width:12.5em;height:12.5em;flex:0 0 12.5em"><dc-import name="ChikuFace" emote="listening" crop="head" hint-size="100%,100%"></dc-import></div>
+                  <div>
+                    <div style="{{ statePillStyleTv }}"><span style="width:1.9em;height:1.9em;display:grid">{{ stateIconTv }}</span><span style="font-size:1.5em;font-weight:700">Listening</span></div>
+                    <div style="font-size:2.75em;font-weight:800;color:#2c2a35;line-height:1.1;margin-top:.36em">Which one is green?</div>
+                    <div style="font-family:'Baloo Tammudu 2',serif;font-size:1.625em;color:#7d6da3;margin-top:.2em">పచ్చగా ఉన్నది ఏది?</div>
+                  </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.375em;margin-top:auto">
+                  <sc-for list="{{ chips }}" as="ch" hint-placeholder-count="3">
+                    <div style="{{ ch.tvStyle }}">
+                      <div style="width:100%;height:6.5em;border-radius:1.375em;background:{{ ch.bg }};display:grid;place-items:center">
+                        <div style="{{ ch.shapeTv }}"></div>
+                      </div>
+                      <div style="font-size:1.625em;font-weight:700;color:#2c2a35;margin-top:.38em">{{ ch.label }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ tvCall }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;inset:0;background:radial-gradient(90% 80% at 50% 30%,#f5e7d0,#fdf6ec);display:grid;place-items:center">
+              <div style="display:flex;align-items:center;gap:3.5em;padding:0 2em 1.5em 7em">
+                <div style="width:24em;height:32em;{{ chikuBob }}"><dc-import name="ChikuFace" emote="listening" show-body="{{ true }}" hint-size="100%,100%"></dc-import></div>
+                <div>
+                  <div style="{{ statePillStyleTv }}"><span style="width:1.9em;height:1.9em;display:grid">{{ stateIconTv }}</span><span style="font-size:1.625em;font-weight:700">Listening</span></div>
+                  <div style="font-size:3.4em;font-weight:800;color:#2c2a35;line-height:1.05;margin-top:.35em;max-width:13ch">Tell me one thing you did today!</div>
+                  <div style="font-family:'Baloo Tammudu 2',serif;font-size:1.875em;color:#7d6da3;margin-top:.4em">ఇవాళ ఏం చేశావో చెప్పు!</div>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <div style="position:absolute;top:2em;left:2em;display:flex;align-items:center;gap:.875em">
+            <div style="width:3.5em;height:3.5em"><dc-import name="ChikuFace" crop="head" emote="idle" hint-size="100%,100%"></dc-import></div>
+            <div style="color:#fdf6ec;font-size:1.5em;font-weight:800;text-shadow:0 .12em .5em rgba(0,0,0,.35)">Chiku</div>
+          </div>
+          <div style="position:absolute;top:2em;right:2em;width:16em">{{ sunMoonTv }}</div>
+
+          <div style="position:absolute;bottom:2em;left:2em;width:17.5em;background:#fdf6ec;border:.25em solid #2c2a35;padding:1.1em;display:flex;gap:1em;align-items:center">
+            <div style="width:6em;height:6em;flex:0 0 6em;display:grid;grid-template-columns:repeat(9,1fr);grid-template-rows:repeat(9,1fr);gap:.06em">
+              <sc-for list="{{ qr }}" as="q" hint-placeholder-count="81">
+                <div style="{{ q.style }}"></div>
+              </sc-for>
+            </div>
+            <div>
+              <div style="font-size:1.2em;font-weight:800;color:#2c2a35;line-height:1.15">Scan with a grown-up's phone</div>
+              <div style="font-family:var(--font-body);font-size:.75em;color:#7d6da3;margin-top:.5em;line-height:1.4">Turns the phone into Chiku's ears + remote</div>
+            </div>
+          </div>
+
+          <div style="position:absolute;top:6.5em;left:2em;max-width:19em;display:flex;align-items:center;gap:.75em;background:#231f2ecc;padding:.75em 1.1em;color:#fdf6ec">
+            <svg width="1.6em" height="1.6em" viewBox="0 0 24 24" fill="none" stroke="#f0a33c" stroke-width="2.4" stroke-linecap="round" style="flex:0 0 auto"><path d="M12 4v6M12 14v6M4 12h6M14 12h6"></path></svg>
+            <span style="font-size:.94em;font-family:var(--font-body);letter-spacing:.04em;line-height:1.4">D-pad focus ring: marigold outline + 1.04× scale — never colour alone</span>
+          </div>
+        </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:0 32px;margin-top:32px">
+          <sc-for list="{{ tvNotes }}" as="n" hint-placeholder-count="3">
+            <div style="padding:16px 0;border-top:2px solid var(--color-divider)">
+              <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">{{ n.k }}</div>
+              <div style="font-size:15px;line-height:1.55;margin-top:6px">{{ n.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══ PHONE REMOTE ═══ -->
+    <sc-if value="{{ isRemote }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;gap:40px;padding-top:32px;flex-wrap:wrap">
+        <div class="kid" style="width:390px;flex:0 0 390px;height:800px;border:2px solid var(--color-text);background:#fdf6ec;overflow:hidden;position:relative;font-family:'Baloo 2',system-ui">
+          <div style="padding:20px 20px 0;display:flex;align-items:center;gap:10px">
+            <div style="width:44px;height:44px"><dc-import name="ChikuFace" crop="head" emote="idle" hint-size="44px,44px"></dc-import></div>
+            <div style="font-size:15px;color:#7d6da3;font-family:var(--font-body)">Paired with <strong>Living room TV</strong></div>
+            <div style="margin-left:auto;width:12px;height:12px;border-radius:6px;background:#2f8f86"></div>
+          </div>
+
+          <div style="padding:26px 20px 0;display:grid;place-items:center">
+            <button onMouseDown="{{ talkOn }}" onMouseUp="{{ talkOff }}" onMouseLeave="{{ talkOff }}" onTouchStart="{{ talkOn }}" onTouchEnd="{{ talkOff }}" style="{{ pttStyle }}">
+              <div style="{{ pttRing }}"></div>
+              {{ pttIcon }}
+              <div style="font-size:22px;font-weight:800;color:{{ pttFg }};margin-top:10px">{{ pttLabel }}</div>
+            </button>
+            <div style="height:34px;display:flex;align-items:flex-end;gap:7px;margin-top:18px">
+              <sc-for list="{{ pttBars }}" as="b" hint-placeholder-count="7">
+                <div style="{{ b.style }}"></div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="padding:22px 20px 0">
+            <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#a293c4;font-family:var(--font-body);margin-bottom:10px">Or tap the answer</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+              <sc-for list="{{ chips }}" as="ch" hint-placeholder-count="3">
+                <button onClick="{{ ch.pick }}" style="{{ ch.remoteStyle }}" style-hover="transform:translateY(-2px)">
+                  <div style="width:100%;height:64px;border-radius:18px;background:{{ ch.bg }};display:grid;place-items:center">
+                    <div style="{{ ch.shape }}"></div>
+                  </div>
+                  <div style="font-size:15px;font-weight:700;color:#2c2a35;margin-top:6px">{{ ch.label }}</div>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="position:absolute;left:0;right:0;bottom:0;border-top:2px solid #e7dcc8;background:#fff;padding:16px 20px 22px;font-family:var(--font-body)">
+            <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a293c4;margin-bottom:10px">Grown-up controls</div>
+            <div style="display:flex;gap:10px">
+              <sc-for list="{{ remoteControls }}" as="rc" hint-placeholder-count="3">
+                <button style="{{ rc.style }}" style-hover="background:#f5e7d0">
+                  {{ rc.icon }}
+                  <span style="font-size:13px;font-weight:600;color:#2c2a35">{{ rc.label }}</span>
+                </button>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        <div style="flex:1;min-width:300px;max-width:540px">
+          <sc-for list="{{ remoteNotes }}" as="n" hint-placeholder-count="4">
+            <div style="padding:16px 0;border-bottom:2px solid var(--color-divider)">
+              <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">{{ n.k }}</div>
+              <div style="font-size:15px;line-height:1.55;margin-top:6px">{{ n.v }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══ PARENT ═══ -->
+    <sc-if value="{{ isParent }}" hint-placeholder-val="{{ false }}">
+      <sc-if value="{{ gateLocked }}" hint-placeholder-val="{{ true }}">
+        <div style="padding-top:64px;display:flex;gap:56px;flex-wrap:wrap;align-items:flex-start">
+          <div style="width:420px;border:2px solid var(--color-text);background:#fff;padding:40px">
+            <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-700)">Grown-up gate</div>
+            <h2 style="font-family:var(--font-heading);font-size:30px;margin:10px 0 8px;letter-spacing:-.02em">Press and hold</h2>
+            <p style="font-size:15px;line-height:1.55;color:var(--color-neutral-700);margin:0 0 28px">Hold the circle for two seconds. No PIN to forget, and a three-year-old will not get through it by tapping.</p>
+            <div style="display:grid;place-items:center;padding:8px 0 20px">
+              <button onMouseDown="{{ holdStart }}" onMouseUp="{{ holdStop }}" onMouseLeave="{{ holdStop }}" onTouchStart="{{ holdStart }}" onTouchEnd="{{ holdStop }}" style="width:180px;height:180px;border-radius:90px;border:2px solid var(--color-text);background:var(--color-accent);position:relative;cursor:pointer;display:grid;place-items:center;overflow:hidden">
+                <div style="{{ holdFill }}"></div>
+                <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" style="position:relative"><path d="M9 11V7a3 3 0 016 0v4"></path><rect x="5" y="11" width="14" height="10"></rect></svg>
+              </button>
+            </div>
+            <div style="height:2px;background:var(--color-divider);margin:8px 0 16px"></div>
+            <div style="font-size:13px;color:var(--color-neutral-600);letter-spacing:.04em">{{ holdHint }}</div>
+          </div>
+          <div style="flex:1;min-width:300px;max-width:480px">
+            <sc-for list="{{ gateNotes }}" as="n" hint-placeholder-count="3">
+              <div style="padding:16px 0;border-bottom:2px solid var(--color-divider)">
+                <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">{{ n.k }}</div>
+                <div style="font-size:15px;line-height:1.55;margin-top:6px">{{ n.v }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ gateOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="padding-top:32px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:2px solid var(--color-text);background:#fff">
+            <sc-for list="{{ stats }}" as="st" hint-placeholder-count="4">
+              <div style="{{ st.style }}">
+                <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-neutral-600)">{{ st.k }}</div>
+                <div style="font-family:var(--font-heading);font-size:44px;line-height:1;margin-top:14px;letter-spacing:-.03em">{{ st.v }}</div>
+                <div style="font-size:13px;color:var(--color-neutral-700);margin-top:8px">{{ st.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:32px;margin-top:32px;align-items:start">
+            <div>
+              <div style="display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--color-divider);padding-bottom:10px">
+                <h3 style="font-family:var(--font-heading);font-size:20px;margin:0;letter-spacing:-.01em">Today's transcript</h3>
+                <span style="font-size:12px;color:var(--color-neutral-600)">Kept on this device · deleted after 7 days</span>
+              </div>
+              <table class="table" style="width:100%">
+                <thead><tr><th style="width:64px">Time</th><th style="width:88px">Who</th><th>What was said</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ transcript }}" as="t" hint-placeholder-count="6">
+                    <tr>
+                      <td style="font-variant-numeric:tabular-nums;color:var(--color-neutral-600)">{{ t.time }}</td>
+                      <td><span style="{{ t.tagStyle }}">{{ t.who }}</span></td>
+                      <td>{{ t.text }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:0;border:2px solid var(--color-text);background:#fff">
+              <div style="padding:22px 22px 20px">
+                <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-neutral-600)">Daily limit</div>
+                <div style="font-family:var(--font-heading);font-size:32px;margin:10px 0 4px;letter-spacing:-.02em">{{ limitLabel }}</div>
+                <input type="range" min="5" max="45" step="5" value="{{ limit }}" onInput="{{ setLimit }}" style="width:100%;accent-color:var(--color-accent);margin-top:10px">
+                <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--color-neutral-600);margin-top:4px"><span>5 min</span><span>45 min</span></div>
+              </div>
+              <div style="height:2px;background:var(--color-divider)"></div>
+              <div style="padding:22px">
+                <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:12px">Chiku speaks</div>
+                <div class="seg">
+                  <button class="{{ segEn }}" onClick="{{ setEn }}">English</button>
+                  <button class="{{ segTe }}" onClick="{{ setTe }}">తెలుగు</button>
+                </div>
+                <div style="font-size:13px;color:var(--color-neutral-700);margin-top:12px;line-height:1.5">{{ langNote }}</div>
+              </div>
+              <div style="height:2px;background:var(--color-divider)"></div>
+              <div style="padding:22px;background:var(--color-accent-100)">
+                <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">Our promises</div>
+                <ul style="margin:12px 0 0;padding-left:18px;font-size:14px;line-height:1.7">
+                  <li>No ads. Ever.</li>
+                  <li>No tracking, no profiles, no third-party analytics.</li>
+                  <li>Voice is transcribed on-device and never stored without your consent.</li>
+                  <li>No streaks, badges or notifications to pull your child back.</li>
+                </ul>
+                <button class="btn btn-secondary" style="margin-top:18px" onClick="{{ lockGate }}">Lock the grown-up area</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </sc-if>
+
+    <!-- ═══ CHARACTER SHEET ═══ -->
+    <sc-if value="{{ isChar }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:32px">
+        <div style="display:grid;grid-template-columns:340px 1fr;gap:40px;align-items:start">
+          <div style="border:2px solid var(--color-text);background:#fff;padding:24px">
+            <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-700)">Direction chosen</div>
+            <h3 style="font-family:var(--font-heading);font-size:26px;margin:8px 0 14px;letter-spacing:-.02em">Elephant calf</h3>
+            <div style="height:300px;background:#fdf6ec;display:grid;place-items:center;margin-bottom:16px">
+              <div style="width:230px;height:290px"><dc-import name="ChikuFace" emote="idle" show-body="{{ true }}" hint-size="230px,290px"></dc-import></div>
+            </div>
+            <p style="font-size:14px;line-height:1.6;margin:0;color:var(--color-neutral-700)">Two circles and a curl: the ears carry the silhouette, the trunk carries the identity. The trunk sweeps left and clears the mouth entirely, so all eight visemes stay readable at 6 cm.</p>
+          </div>
+          <div>
+            <div style="border-bottom:2px solid var(--color-divider);padding-bottom:10px;margin-bottom:20px"><h3 style="font-family:var(--font-heading);font-size:20px;margin:0">Silhouette &amp; scale test</h3></div>
+            <div style="display:flex;align-items:flex-end;gap:40px;flex-wrap:wrap">
+              <sc-for list="{{ scales }}" as="s" hint-placeholder-count="4">
+                <div>
+                  <div style="{{ s.box }}"><dc-import name="ChikuFace" crop="head" emote="idle" hint-size="100%,100%"></dc-import></div>
+                  <div style="font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600);margin-top:10px">{{ s.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="border-bottom:2px solid var(--color-divider);padding-bottom:10px;margin:36px 0 20px"><h3 style="font-family:var(--font-heading);font-size:20px;margin:0">4 emotes</h3></div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:2px;background:var(--color-divider);border:2px solid var(--color-text)">
+              <sc-for list="{{ emotes }}" as="e" hint-placeholder-count="4">
+                <div style="background:#fdf6ec;padding:18px 14px;text-align:left">
+                  <div style="height:170px"><dc-import name="ChikuFace" emote="{{ e.id }}" crop="head" hint-size="100%,170px"></dc-import></div>
+                  <div style="font-family:var(--font-heading);font-size:15px;margin-top:12px">{{ e.label }}</div>
+                  <div style="font-size:12px;color:var(--color-neutral-700);line-height:1.45;margin-top:4px">{{ e.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="border-bottom:2px solid var(--color-divider);padding-bottom:10px;margin:44px 0 20px;display:flex;align-items:baseline;justify-content:space-between">
+          <h3 style="font-family:var(--font-heading);font-size:20px;margin:0">8 mouth visemes</h3>
+          <span style="font-size:12px;color:var(--color-neutral-600)">Discrete, swappable layers — driven by TTS timing marks</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:2px;background:var(--color-divider);border:2px solid var(--color-text)">
+          <sc-for list="{{ visemes }}" as="v" hint-placeholder-count="8">
+            <div style="background:#fff;padding:14px 10px">
+              <div style="height:130px;background:#fdf6ec"><dc-import name="ChikuFace" crop="head" viseme="{{ v.id }}" hint-size="100%,130px"></dc-import></div>
+              <div style="font-family:var(--font-heading);font-size:16px;margin-top:10px">{{ v.label }}</div>
+              <div style="font-size:11px;color:var(--color-neutral-600)">{{ v.note }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="border-bottom:2px solid var(--color-divider);padding-bottom:10px;margin:44px 0 20px"><h3 style="font-family:var(--font-heading);font-size:20px;margin:0">The listening state — the one moment that must be unmistakable</h3></div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:32px">
+          <sc-for list="{{ listenCards }}" as="l" hint-placeholder-count="3">
+            <div style="border:2px solid var(--color-text);background:#fdf6ec">
+              <div style="height:250px;display:grid;place-items:center;padding:26px">
+                <div style="width:190px;height:190px"><dc-import name="ChikuFace" crop="head" emote="{{ l.emote }}" ring="{{ l.ring }}" bars="{{ l.bars }}" hint-size="190px,190px"></dc-import></div>
+              </div>
+              <div style="background:#fff;border-top:2px solid var(--color-text);padding:16px 18px">
+                <div style="font-family:var(--font-heading);font-size:16px">{{ l.label }}</div>
+                <div style="font-size:13px;color:var(--color-neutral-700);line-height:1.5;margin-top:5px">{{ l.note }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══ DESIGN SYSTEM ═══ -->
+    <sc-if value="{{ isSystem }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:32px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:2px;background:var(--color-divider);border:2px solid var(--color-text)">
+          <sc-for list="{{ palette }}" as="p" hint-placeholder-count="6">
+            <div style="background:#fff">
+              <div style="{{ p.chip }}"></div>
+              <div style="padding:14px">
+                <div style="font-family:var(--font-heading);font-size:15px">{{ p.name }}</div>
+                <div style="font-size:12px;color:var(--color-neutral-600);font-variant-numeric:tabular-nums">{{ p.hex }}</div>
+                <div style="font-size:12px;color:var(--color-neutral-700);line-height:1.45;margin-top:6px">{{ p.use }}</div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:40px">
+          <div style="border:2px solid var(--color-text);background:#fff;padding:26px">
+            <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-700)">Type pairing — kid screens</div>
+            <div style="font-family:'Baloo 2';font-size:44px;font-weight:800;line-height:1.05;margin-top:14px;color:#2c2a35">Which one is green?</div>
+            <div style="font-family:'Baloo Tammudu 2',serif;font-size:32px;color:#7d6da3;line-height:1.3;margin-top:8px">పచ్చగా ఉన్నది ఏది?</div>
+            <div style="height:2px;background:var(--color-divider);margin:20px 0"></div>
+            <div style="font-size:14px;line-height:1.6;color:var(--color-neutral-700)">Baloo 2 with Baloo Tammudu 2 — one superfamily, so the Latin and Telugu share weight, roundness and x-height. Kid copy is spoken aloud and never load-bearing; it sits at 17px minimum on phone, 24px on TV.</div>
+          </div>
+          <div style="border:2px solid var(--color-text);background:#fff;padding:26px">
+            <div style="font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--color-accent-700)">Type — grown-up screens</div>
+            <div style="font-family:var(--font-heading);font-size:44px;font-weight:700;line-height:1.05;margin-top:14px;letter-spacing:-.03em">Anu said 27 words</div>
+            <div style="font-family:var(--font-body);font-size:16px;color:var(--color-neutral-700);margin-top:10px">Archivo, flush left, on the Modernist grid.</div>
+            <div style="height:2px;background:var(--color-divider);margin:20px 0"></div>
+            <div style="font-size:14px;line-height:1.6;color:var(--color-neutral-700)">The parent area keeps Modernist intact: zero radius, 2px rules, red used only for the primary action. The switch in typeface and corner radius is itself the signal that this room belongs to the grown-up.</div>
+          </div>
+        </div>
+
+        <div style="border-bottom:2px solid var(--color-divider);padding-bottom:10px;margin:44px 0 0"><h3 style="font-family:var(--font-heading);font-size:20px;margin:0">Eight components</h3></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:2px;background:var(--color-divider);border:2px solid var(--color-text);border-top:none">
+          <sc-for list="{{ components }}" as="c" hint-placeholder-count="8">
+            <div style="background:#fff;padding:22px">
+              <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-neutral-600)">{{ c.num }}</div>
+              <div style="font-family:var(--font-heading);font-size:17px;margin-top:6px">{{ c.name }}</div>
+              <div style="font-size:13px;color:var(--color-neutral-700);line-height:1.5;margin-top:6px;min-height:56px">{{ c.note }}</div>
+              <div style="{{ c.demoStyle }}">{{ c.demo }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <!-- ═══ APP ICONS ═══ -->
+    <sc-if value="{{ isIcons }}" hint-placeholder-val="{{ false }}">
+      <div style="padding-top:32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:32px">
+        <sc-for list="{{ icons }}" as="ic" hint-placeholder-count="3">
+          <div style="border:2px solid var(--color-text);background:#fff">
+            <div style="padding:32px;display:flex;align-items:flex-end;gap:24px;background:var(--color-neutral-100)">
+              <div style="{{ ic.big }}">
+                <div style="{{ ic.inner }}"><dc-import name="ChikuFace" crop="head" emote="{{ ic.emote }}" hint-size="100%,100%"></dc-import></div>
+              </div>
+              <div style="{{ ic.mid }}">
+                <div style="{{ ic.inner }}"><dc-import name="ChikuFace" crop="head" emote="{{ ic.emote }}" hint-size="100%,100%"></dc-import></div>
+              </div>
+              <div style="{{ ic.small }}">
+                <div style="{{ ic.inner }}"><dc-import name="ChikuFace" crop="head" emote="{{ ic.emote }}" hint-size="100%,100%"></dc-import></div>
+              </div>
+            </div>
+            <div style="border-top:2px solid var(--color-text);padding:20px 22px">
+              <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent-700)">{{ ic.num }}</div>
+              <div style="font-family:var(--font-heading);font-size:19px;margin-top:6px">{{ ic.name }}</div>
+              <div style="font-size:13px;line-height:1.55;color:var(--color-neutral-700);margin-top:8px">{{ ic.note }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <p style="max-width:60ch;font-size:14px;line-height:1.6;color:var(--color-neutral-700);margin-top:32px">Shown at 180 / 96 / 48 px. The 48px row is the test that matters: option 3 survives it because the trunk curl is a shape, not a detail.</p>
+    </sc-if>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:960},&quot;language&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;en&quot;,&quot;te&quot;],&quot;default&quot;:&quot;en&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Content&quot;},&quot;celebration&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;confetti&quot;,&quot;calm&quot;],&quot;default&quot;:&quot;confetti&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Motion&quot;},&quot;reduceMotion&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Motion&quot;}}">
+const CREAM = "#fdf6ec", SAND = "#f5e7d0", INK = "#2c2a35", CHIKU = "#a293c4", CHDARK = "#7d6da3", MARI = "#f0a33c", TEAL = "#2f8f86", ROSE = "#e9848c", LEAF = "#6aa84f";
+const VIS = ["closed", "A", "E", "O", "U", "F", "L", "smile"];
+const QRBITS = "111010111100010001101110101100010001111010111000101000110111011100010101111010111000100011101110101";
+
+class Component extends DCLogic {
+  state = { screen: "home", cp: "ask", call: "listening", tv: "player", gate: false, hold: 0, limit: 20, lang: null, viseme: "closed", talking: false };
+
+  componentDidMount() {
+    this.mouth = setInterval(() => {
+      const st = this.state;
+      const speaking = (st.screen === "player" && (st.cp === "ask" || st.cp === "answered" || st.cp === "retry")) || (st.screen === "call" && st.call === "speaking");
+      if (!speaking) { if (st.viseme !== "closed") this.setState({ viseme: "closed" }); return; }
+      this.setState({ viseme: VIS[Math.floor(Math.random() * 7)] });
+    }, 200);
+  }
+  componentWillUnmount() { clearInterval(this.mouth); clearInterval(this.holdT); }
+
+  go(screen) { return () => this.setState({ screen }); }
+
+  holdStart = () => {
+    clearInterval(this.holdT);
+    this.holdT = setInterval(() => {
+      const h = this.state.hold + 0.06;
+      if (h >= 1) { clearInterval(this.holdT); this.setState({ hold: 0, gate: true }); }
+      else this.setState({ hold: h });
+    }, 70);
+  };
+  holdStop = () => { clearInterval(this.holdT); this.setState({ hold: 0 }); };
+
+  navBtn(active) {
+    return "display:flex;align-items:center;gap:10px;width:100%;padding:11px 20px;border:none;background:" + (active ? "var(--color-accent-100)" : "transparent") +
+      ";border-left:4px solid " + (active ? "var(--color-accent)" : "transparent") +
+      ";font-family:var(--font-body);font-size:14px;font-weight:" + (active ? 600 : 400) + ";color:var(--color-text);text-align:left;cursor:pointer";
+  }
+  stepBtn(active) {
+    return "height:36px;padding:0 16px;border:2px solid " + (active ? "var(--color-accent)" : "var(--color-divider)") + ";background:" + (active ? "var(--color-accent)" : "#fff") +
+      ";color:" + (active ? "#fff" : "var(--color-text)") + ";font-family:var(--font-body);font-size:13px;font-weight:600;letter-spacing:.02em;cursor:pointer";
+  }
+
+  sunMoonSvg(t, w, cssW) {
+    const x = 12 + t * (w - 24), y = 40 - 30 * Math.sin(Math.PI * t);
+    return React.createElement("svg", { width: cssW || w, height: cssW ? "auto" : 52, viewBox: "0 0 " + w + " 52", key: "sm" + w + (cssW || "") },
+      React.createElement("path", { d: "M12 42 Q" + (w / 2) + " -16 " + (w - 12) + " 42", fill: "none", stroke: "#cdc3e4", strokeWidth: 4, strokeLinecap: "round" }),
+      React.createElement("circle", { cx: 12, cy: 42, r: 7, fill: MARI }),
+      React.createElement("path", { d: "M" + (w - 19) + " 42 a7 7 0 1 0 9 -6 a6 6 0 0 1 -9 6 z", fill: CHDARK }),
+      React.createElement("circle", { cx: x, cy: y, r: 11, fill: MARI, stroke: CREAM, strokeWidth: 4 })
+    );
+  }
+  icon(path, color, size) {
+    return React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 2.3, strokeLinecap: "round", strokeLinejoin: "round", style: { flex: "0 0 auto" } },
+      path.map((d, i) => React.createElement("path", { d, key: i })));
+  }
+
+  renderVals() {
+    const s = this.state, S = s.screen;
+    const en = (s.lang ?? this.props.language ?? "en") === "en";
+    const calm = (this.props.celebration ?? "confetti") === "calm";
+    const still = this.props.reduceMotion ?? false;
+    const speakingPlayer = s.cp === "ask" || s.cp === "answered" || s.cp === "retry";
+
+    const meta = {
+      home: ["Screen 01", "Kid Home", "Five picture cards and one call. Nothing here needs reading: titles are decorative, every target is 64px or larger, and the only text a child must act on is spoken by Chiku."],
+      player: ["Screen 02", "Episode Player", "The checkpoint is the product. Four states, one at a time, each with a shape-and-motion cue as well as a colour one. Step through them with the controls below."],
+      call: ["Screen 03", "Call Chiku", "A short daily call. Time reads as a sun crossing to a moon — no digits, no countdown, no pressure. Tap Chiku to swap listening and speaking."],
+      tv: ["Screen 04", "TV Stage", "The 10-foot layout. Big silhouettes, 44px+ type, a marigold focus ring for D-pad, and a pairing card that turns a phone into Chiku's ears."],
+      remote: ["Screen 05", "Phone Mic / Remote", "When the TV is the stage the phone becomes one giant push-to-talk, with picture chips as the mishear fallback and small grown-up controls docked at the bottom."],
+      parent: ["Screen 06", "Parent Dashboard", "Behind a press-and-hold gate. Talk time, the full transcript, a daily limit and the promises — stated plainly, not buried in a policy."],
+      character: ["Deliverable 01", "Character sheet — Chiku", "Elephant calf. Layered flat vector: idle, blink, 8 visemes, 4 emotes. Every state is a discrete swappable layer so TTS timing marks can drive the mouth."],
+      system: ["Deliverable 03", "Mini design system", "Two rooms, one product: the Chiku palette for children, Modernist for grown-ups. Palette, type pairing and the eight components the prototype is built from."],
+      icons: ["Deliverable 04", "App icon — 3 options", "Built from the chosen character, tested down to 48px."]
+    }[S];
+
+    const chipDefs = [
+      { label: "Leaf", te: "ఆకు", bg: "#dcecd2", shape: "width:38px;height:38px;border-radius:50% 6px 50% 6px;background:" + LEAF, tv: "width:2.6em;height:2.6em;border-radius:50% .4em 50% .4em;background:" + LEAF, correct: true },
+      { label: "Mango", te: "మామిడి", bg: "#fbe6c6", shape: "width:40px;height:34px;border-radius:50%;background:" + MARI, tv: "width:2.75em;height:2.3em;border-radius:50%;background:" + MARI },
+      { label: "Sky", te: "ఆకాశం", bg: "#d8e6ef", shape: "width:38px;height:38px;border-radius:19px;background:#6f9fc4", tv: "width:2.6em;height:2.6em;border-radius:50%;background:#6f9fc4" }
+    ];
+    const chipBase = "border:3px solid transparent;background:#fff;border-radius:24px;padding:10px;cursor:pointer;transition:transform .15s;box-shadow:0 2px 0 rgba(44,42,53,.1)";
+    const chips = chipDefs.map((c) => ({
+      label: en ? c.label : c.te, bg: c.bg, shape: c.shape,
+      shapeTv: c.tv,
+      style: chipBase + ";border-color:" + (s.cp === "retry" ? TEAL : "transparent") + ";opacity:" + (s.cp === "ask" ? ".55" : "1"),
+      remoteStyle: chipBase + ";border-color:#efe4d0",
+      tvStyle: "background:#fff;border-radius:1.75em;padding:.875em;border:.38em solid " + (c.correct ? MARI : "transparent") + ";transform:scale(" + (c.correct ? 1.04 : 1) + ")",
+      pick: () => this.setState({ cp: c.correct ? "answered" : "retry" })
+    }));
+
+    const cpMap = {
+      ask: { emote: "encouraging", label: "Chiku is talking", line: en ? "Which one is green?" : "పచ్చగా ఉన్నది ఏది?", te: en ? "పచ్చగా ఉన్నది ఏది?" : "Which one is green?", pill: CHDARK, hint: "Chiku is still speaking" },
+      listen: { emote: "listening", label: "Listening to you", line: "…", te: en ? "నీ మాట వింటున్నాను" : "నీ మాట వింటున్నాను", pill: TEAL, hint: "Say it, or tap a picture" },
+      answered: { emote: "happy", label: "Chiku heard you", line: en ? "Yes! The leaf is green." : "అవును! ఆకు పచ్చగా ఉంది.", te: en ? "అవును! ఆకు పచ్చ!" : "Yes! The leaf is green.", pill: MARI, hint: "Tap a picture to say more" },
+      retry: { emote: "encouraging", label: "Let's try together", line: en ? "Let's say it together — pach-cha!" : "కలిసి చెప్పుదాం — పచ్చ!", te: en ? "కలిసి చెప్పుదాం!" : "Let's say it together!", pill: CHDARK, hint: "Or tap the green one" }
+    }[s.cp] || {};
+
+    const stateIconFor = (kind, size) => kind === TEAL
+      ? this.icon(["M6 18a8 8 0 010-12", "M11 15a4 4 0 010-6", "M15 4c4 3 4 13 0 16"], CREAM, size)
+      : this.icon(["M4 12h3l3-5 3 10 3-5h4"], CREAM, size);
+
+    const pill = (color, big) => big
+      ? "display:inline-flex;align-items:center;gap:.7em;background:" + color + ";color:" + CREAM + ";border-radius:999px;padding:.6em 1.2em;font-family:'Baloo 2'"
+      : "display:inline-flex;align-items:center;gap:8px;background:" + color + ";color:" + CREAM + ";border-radius:999px;padding:8px 15px;font-family:'Baloo 2'";
+
+    const callMap = {
+      listening: { emote: "listening", label: "Listening to you", pill: TEAL, line: en ? "I'm listening!" : "వింటున్నాను!" },
+      speaking: { emote: "encouraging", label: "Chiku is talking", pill: CHDARK, line: en ? "I painted a cow today. Blue!" : "ఇవాళ ఆవును గీశాను. నీలం!" },
+      bye: { emote: "goodbye", label: "Time to go", pill: MARI, line: en ? "Go show Amma your drawing!" : "అమ్మకి బొమ్మ చూపించు!" }
+    }[s.call];
+
+    return {
+      navGroups: [
+        { label: "Prototype", items: [["01", "Kid Home", "home"], ["02", "Episode Player", "player"], ["03", "Call Chiku", "call"], ["04", "TV Stage", "tv"], ["05", "Phone Remote", "remote"], ["06", "Parent Dashboard", "parent"]].map(([num, label, id]) => ({ num, label, go: this.go(id), style: this.navBtn(S === id) })) },
+        { label: "Deliverables", items: [["01", "Character Sheet", "character"], ["03", "Design System", "system"], ["04", "App Icons", "icons"]].map(([num, label, id]) => ({ num, label, go: this.go(id), style: this.navBtn(S === id) })) }
+      ],
+      scrKicker: meta[0], scrTitle: meta[1], scrNote: meta[2],
+      isHome: S === "home", isPlayer: S === "player", isCall: S === "call", isTv: S === "tv", isRemote: S === "remote", isParent: S === "parent", isChar: S === "character", isSystem: S === "system", isIcons: S === "icons",
+      goHome: this.go("home"), goCall: this.go("call"), goParent: this.go("parent"),
+      rootClass: still ? "no-motion" : "",
+      chikuBob: still ? "" : "animation:chBob 3.6s ease-in-out infinite",
+
+      episodes: [
+        ["Colours at the Market", "సంతలో రంగులు", SAND, "width:44px;height:44px;border-radius:22px;background:" + MARI, "position:absolute;right:16px;bottom:14px;width:52px;height:34px;border-radius:26px 26px 6px 6px;background:" + LEAF],
+        ["Counting with Thatha", "తాతతో లెక్కలు", "#e4ecdd", "width:56px;height:56px;border-radius:28px;background:" + LEAF, "position:absolute;left:14px;bottom:14px;width:64px;height:10px;border-radius:5px;background:" + CHDARK],
+        ["Where Does Rain Go?", "వాన ఎక్కడికి పోతుంది?", "#dbe7ef", "width:64px;height:32px;border-radius:32px 32px 0 0;background:#6f9fc4", "position:absolute;right:22px;bottom:12px;width:14px;height:30px;border-radius:7px;background:" + TEAL],
+        ["Amma's Kitchen Sounds", "అమ్మ వంటగది శబ్దాలు", "#f6ded9", "width:52px;height:52px;border-radius:26px;background:" + ROSE, "position:absolute;left:20px;top:14px;width:12px;height:44px;border-radius:6px;background:" + CREAM],
+        ["The Slow Little Snail", "నెమ్మది నత్త", "#e8e2f2", "width:54px;height:54px;border-radius:27px;border:12px solid " + CHIKU + ";box-sizing:border-box", "position:absolute;left:18px;bottom:16px;width:42px;height:12px;border-radius:6px;background:" + CHDARK]
+      ].map(([title, te, bg, motif, motif2]) => ({
+        title, te, bg, motif, motif2, open: this.go("player"),
+        cardStyle: "position:relative;border:none;background:#fff;border-radius:26px;padding:12px;cursor:pointer;text-align:left;transition:transform .18s;box-shadow:0 3px 0 rgba(44,42,53,.12)"
+      })),
+      homeNotes: [
+        { k: "No reading required", v: "Titles are decorative — a child navigates by picture and by Chiku's voice reading the row aloud on focus. Removing all five labels would not break the screen." },
+        { k: "One primary action", v: "Call Chiku is the only full-width element and the only one with a drop shadow, so it wins at a glance on phone and across a room." },
+        { k: "No autoplay, no next-up", v: "Finishing an episode returns here. There is no queue, no recommendation rail and no reason to keep scrolling." },
+        { k: "Grown-ups, top right", v: "A person glyph, not a gear, and it opens the press-and-hold gate — visible trust, out of a child's path." }
+      ],
+
+      cpSteps: [["ask", "1 · Chiku asks"], ["listen", "2 · Listening"], ["answered", "3 · Child answered"], ["retry", "4 · Gentle retry"], ["mic", "0 · Mic permission"]].map(([id, label]) => ({ label, go: () => this.setState({ cp: id }), style: this.stepBtn(s.cp === id) })),
+      cpMic: s.cp === "mic", cpOverlay: s.cp !== "mic",
+      cpToAsk: () => this.setState({ cp: "ask" }),
+      cpEmote: cpMap.emote, cpViseme: speakingPlayer ? s.viseme : "closed", cpRing: s.cp === "listen",
+      cpListening: s.cp === "listen", cpCelebrate: s.cp === "answered",
+      cpLine: cpMap.line, cpLineTe: cpMap.te, cpReward: en ? "పచ్చ · pach-cha · green" : "pach-cha · green",
+      chipsHint: cpMap.hint,
+      statePillStyle: pill(cpMap.pill || CHDARK, false),
+      statePillStyleTv: pill(TEAL, true),
+      stateIcon: stateIconFor(cpMap.pill === TEAL ? TEAL : "x", 20),
+      stateIconTv: stateIconFor(TEAL, "100%"),
+      stateLabel: cpMap.label,
+      chips,
+      confetti: (calm || still ? [] : [0, 1, 2, 3, 4, 5, 6, 7]).map((i) => ({
+        style: "position:absolute;left:" + (8 + i * 12) + "%;bottom:0;width:" + (7 + (i % 3) * 3) + "px;height:" + (7 + (i % 2) * 5) + "px;border-radius:" + (i % 2 ? "50%" : "2px") + ";background:" + [MARI, TEAL, ROSE, LEAF, CHIKU][i % 5] + ";animation:chConfetti " + (1.5 + (i % 4) * 0.35) + "s ease-out infinite;animation-delay:" + (i * 0.14) + "s"
+      })),
+      sunMoon: this.sunMoonSvg(0.42, 168),
+      sunMoonTv: this.sunMoonSvg(0.42, 260, "100%"),
+      cpNotes: [
+        { k: "State 1 — Chiku asks", v: "Mouth runs the viseme set off TTS timing marks; ears at rest, no ring. The answer chips are dimmed to 55% so nothing is tappable while Chiku is still talking." },
+        { k: "State 2 — Listening", v: "Three simultaneous cues, only one of them colour: the head leans in and the near ear cups forward, a dashed ring rotates around the head, and six bars ride the input level. On a greyscale screen it still reads." },
+        { k: "State 3 — Answered", v: "Celebrate is 1.2 seconds of confetti and a happy emote, then the episode resumes. The word the child earned is shown in Telugu and Latin — no points, no badge." },
+        { k: "State 4 — Gentle retry", v: "Never 'wrong'. Chiku models the word slowly and the picture chips gain a teal border, so a mishear is always escapable by tapping." },
+        { k: "Mic permission", v: "Framed as turning on Chiku's ears, held behind one grown-up tap, with the plain-language promise directly under the button." }
+      ],
+
+      callSteps: [["listening", "Listening"], ["speaking", "Chiku speaking"], ["bye", "Goodbye"]].map(([id, label]) => ({ label, go: () => this.setState({ call: id }), style: this.stepBtn(s.call === id) })),
+      callEmote: callMap.emote, callViseme: s.call === "speaking" ? s.viseme : "closed", callRing: s.call === "listening",
+      callLine: callMap.line, toggleCall: () => this.setState({ call: s.call === "listening" ? "speaking" : "listening" }), endCall: this.go("home"),
+      callNotes: [
+        { k: "Time as sky, not clock", v: "The sun rises and sets across the session. A child reads 'nearly night' without numbers; the parent set the length in the dashboard." },
+        { k: "Two states, two shapes", v: "Listening is an ear glyph in a teal pill with a rotating ring. Speaking is a waveform glyph in a violet pill with a moving mouth. Icon, motion and colour all differ." },
+        { k: "Ending is a wave", v: "The end button is a waving-hands glyph, and Chiku's last line points outward: 'Go show Amma your drawing!' No 'stay a bit longer', no next call teaser." },
+        { k: "Bounded by design", v: "One call a day, capped by the parent limit. When the moon lands, Chiku says goodbye — the child cannot restart it." }
+      ],
+
+      tvSteps: [["player", "Player on TV"], ["call", "Call on TV"]].map(([id, label]) => ({ label, go: () => this.setState({ tv: id }), style: this.stepBtn(s.tv === id) })),
+      tvPlayer: s.tv === "player", tvCall: s.tv === "call",
+      qr: QRBITS.split("").map((b) => ({ style: "background:" + (b === "1" ? INK : "transparent") })),
+      tvNotes: [
+        { k: "Type floor", v: "24px minimum, 44px for anything a child acts on. Chiku's head is 200px so the listening ring is legible from three metres." },
+        { k: "Focus is not colour", v: "The D-pad focus ring is a 6px marigold outline plus a 1.04× scale bump, so it survives colour-blindness and washed-out TV panels." },
+        { k: "Pairing, not casting", v: "The QR card lives in the corner all session. Scanning it makes the phone the microphone and the remote — the TV never listens on its own." }
+      ],
+
+      pttStyle: "position:relative;width:290px;height:290px;border-radius:145px;border:none;background:" + (s.talking ? TEAL : CREAM) + ";box-shadow:0 6px 0 " + (s.talking ? "#25736c" : "#e7dcc8") + ",inset 0 0 0 6px " + (s.talking ? "#25736c" : "#efe4d0") + ";display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer",
+      pttRing: s.talking ? "position:absolute;inset:-18px;border-radius:163px;border:6px solid " + TEAL + ";animation:chPulse 1.6s ease-in-out infinite" : "display:none",
+      pttIcon: s.talking
+        ? this.icon(["M6 18a8 8 0 010-12", "M11 15a4 4 0 010-6", "M15 4c4 3 4 13 0 16"], CREAM, 96)
+        : this.icon(["M12 3.5a3.4 3.4 0 013.4 3.4v4.8a3.4 3.4 0 01-6.8 0V6.9A3.4 3.4 0 0112 3.5z", "M5.8 11.2a6.2 6.2 0 0012.4 0", "M12 17.4V21", "M8.6 21h6.8"], CHDARK, 96),
+      pttLabel: s.talking ? (en ? "Chiku hears you" : "చికు వింటున్నాడు") : (en ? "Hold to talk" : "నొక్కి మాట్లాడు"),
+      pttFg: s.talking ? CREAM : CHDARK,
+      talkOn: () => this.setState({ talking: true }), talkOff: () => this.setState({ talking: false }),
+      pttBars: [0, 1, 2, 3, 4, 5, 6].map((i) => ({ style: "width:11px;height:100%;border-radius:6px;background:" + (s.talking ? TEAL : "#e7dcc8") + ";transform-origin:bottom;animation:" + (s.talking ? "chBarUp .85s ease-in-out infinite" : "none") + ";animation-delay:" + i * 0.1 + "s;transform:" + (s.talking ? "none" : "scaleY(.3)") })),
+      remoteControls: [
+        { label: "Pause", icon: this.icon(["M9 5v14", "M15 5v14"], INK, 20) },
+        { label: "End", icon: this.icon(["M5 5l14 14", "M19 5L5 19"], INK, 20) },
+        { label: "Volume", icon: this.icon(["M4 10v4h3l4 4V6L7 10H4", "M16 9a4 4 0 010 6"], INK, 20) }
+      ].map((c) => ({ ...c, style: "flex:1;height:64px;border:2px solid #efe4d0;background:#fdf6ec;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer" })),
+      remoteNotes: [
+        { k: "One giant target", v: "290px push-to-talk, held rather than toggled, so a three-year-old's grip maps to 'my turn'. Releasing ends the turn — no stop button to find." },
+        { k: "Mishear fallback", v: "Picture chips sit directly under the mic. Two failed attempts and Chiku switches to 'point to it' without ever saying the child was wrong." },
+        { k: "Colour-safe", v: "Talking is a filled circle with an ear glyph, an outer pulse ring and live bars. Idle is an outlined circle with a mic glyph and flat bars." },
+        { k: "Grown-up strip", v: "Docked at the bottom in Archivo, small and square-cornered — deliberately in the parent's visual language so a child skims past it." }
+      ],
+
+      gateLocked: !s.gate, gateOpen: s.gate,
+      holdStart: this.holdStart, holdStop: this.holdStop,
+      holdFill: "position:absolute;left:0;bottom:0;width:100%;height:" + Math.round(s.hold * 100) + "%;background:var(--color-accent-700);transition:height .07s linear",
+      holdHint: s.hold > 0 ? "Keep holding… " + Math.round(s.hold * 100) + "%" : "Hold to enter the grown-up area",
+      lockGate: () => this.setState({ gate: false }),
+      gateNotes: [
+        { k: "Why hold, not PIN", v: "A PIN is one more thing to forget and one more thing to watch a parent type. Two seconds of sustained pressure is beyond an accidental tap and inside a distracted parent's patience." },
+        { k: "No dark pattern", v: "The gate protects settings and transcripts. It never gates the child's exit — a child can always leave a session without a grown-up." },
+        { k: "What is behind it", v: "Talk time, the full transcript, the daily limit, language, and the promises. Nothing to purchase." }
+      ],
+      stats: [
+        { k: "Talk time today", v: "27", sub: "words Anu said to Chiku — the metric we optimise" },
+        { k: "Turns taken", v: "9", sub: "checkpoints answered out of 11 asked" },
+        { k: "New word", v: "green", sub: "పచ్చ · said twice unprompted" },
+        { k: "Screen time", v: "14m", sub: "of the 20m you allowed" }
+      ].map((st, i) => ({ ...st, style: "padding:24px;border-right:" + (i < 3 ? "2px solid var(--color-divider)" : "none") })),
+      transcript: [
+        ["16:04", "Chiku", "Which one is green?"],
+        ["16:04", "Anu", "the leaf!"],
+        ["16:05", "Chiku", "Yes! The leaf is green — pachcha."],
+        ["16:07", "Chiku", "How many bananas do you see?"],
+        ["16:07", "Anu", "one two… five!"],
+        ["16:08", "Chiku", "Let's count together — one, two, three."],
+        ["16:11", "Anu", "pachcha!"],
+        ["16:12", "Chiku", "Go show Amma your drawing!"]
+      ].map(([time, who, text]) => ({ time, who, text, tagStyle: "display:inline-block;padding:2px 10px;font-size:12px;font-weight:600;background:" + (who === "Anu" ? "var(--color-accent-100);color:var(--color-accent-700)" : "var(--color-neutral-200);color:var(--color-neutral-700)") })),
+      limit: s.limit, limitLabel: s.limit + " minutes a day",
+      setLimit: (e) => this.setState({ limit: +e.target.value }),
+      segEn: "seg-opt" + (en ? " is-active" : ""), segTe: "seg-opt" + (en ? "" : " is-active"),
+      setEn: () => this.setState({ lang: "en" }), setTe: () => this.setState({ lang: "te" }),
+      langNote: en ? "Chiku speaks Indian English and drops in Telugu words as rewards. Switch to Telugu-first at any time — the child screens re-order, they do not translate." : "చికు తెలుగులో మాట్లాడుతాడు; English words come in as rewards.",
+
+      scales: [
+        { label: "6 cm · phone", box: "width:56px;height:56px;background:" + CREAM },
+        { label: "TV thumb", box: "width:96px;height:96px;background:" + CREAM },
+        { label: "48px icon", box: "width:48px;height:48px;background:" + SAND },
+        { label: "60 cm · TV", box: "width:200px;height:200px;background:" + CREAM }
+      ],
+      emotes: [
+        { id: "happy", label: "Happy / celebrate", note: "Eyes arc closed, ears up, blush on. Used for 1.2s only." },
+        { id: "listening", label: "Listening / thinking", note: "Lean-in, near ear cupped, ring and bars. The critical state." },
+        { id: "encouraging", label: "Encouraging", note: "Trunk lifted, one brow up, small smile. Used for retries." },
+        { id: "goodbye", label: "Goodbye wave", note: "Trunk swings out and up; the session-end pose." }
+      ],
+      visemes: [
+        { id: "closed", label: "closed", note: "rest / silence" }, { id: "A", label: "A", note: "ah, aa" }, { id: "E", label: "E", note: "eh, ee" }, { id: "O", label: "O", note: "oh, au" },
+        { id: "U", label: "U / W", note: "oo, w" }, { id: "F", label: "F / V", note: "labiodental" }, { id: "L", label: "L", note: "tongue visible" }, { id: "smile", label: "wide smile", note: "laughter, yay" }
+      ],
+      listenCards: [
+        { emote: "idle", ring: false, bars: false, label: "Idle — not listening", note: "Ears at rest, no ring, mouth closed. The child's turn has not started." },
+        { emote: "listening", ring: true, bars: false, label: "Listening — ring only", note: "Head leans in, near ear cups forward, dashed ring rotates. Works with sound off." },
+        { emote: "listening", ring: true, bars: true, label: "Listening — with level", note: "Bars ride the mic input, so the child sees their own voice land." }
+      ],
+
+      palette: [
+        { name: "Cream", hex: "#FDF6EC", use: "Kid ground. Warm, low-glare, safe under a TV's brightness.", chip: "height:96px;background:" + CREAM },
+        { name: "Chiku violet", hex: "#A293C4", use: "The character. Never a UI surface, so Chiku is always the figure.", chip: "height:96px;background:" + CHIKU },
+        { name: "Marigold", hex: "#F0A33C", use: "One primary action per screen. Also the D-pad focus ring.", chip: "height:96px;background:" + MARI },
+        { name: "Listening teal", hex: "#2F8F86", use: "Reserved: only ever means 'Chiku is hearing you'.", chip: "height:96px;background:" + TEAL },
+        { name: "Rose", hex: "#E9848C", use: "Ending and leaving. Warm, not alarming.", chip: "height:96px;background:" + ROSE },
+        { name: "Ink", hex: "#2C2A35", use: "Type and the mouth. Shared with the Modernist parent area.", chip: "height:96px;background:" + INK }
+      ],
+      components: [
+        { num: "01", name: "Episode card", note: "Picture tile, decorative title, 44px play chip. Whole card is the target.", demoStyle: "margin-top:14px;background:" + SAND + ";border-radius:20px;height:70px;display:flex;align-items:center;padding:0 14px;gap:10px;font-family:'Baloo 2';font-weight:700;color:" + INK, demo: "Colours at the Market" },
+        { num: "02", name: "Listening indicator", note: "Ring + ear-cup + level bars. Three cues, one colour — never colour alone.", demoStyle: "margin-top:14px;" + pill(TEAL, false), demo: "Listening to you" },
+        { num: "03", name: "Checkpoint overlay", note: "Sheet over the video: Chiku, one line, state pill, chips. Four states.", demoStyle: "margin-top:14px;background:" + CREAM + ";border-radius:18px 18px 0 0;height:70px;display:flex;align-items:flex-end;padding:10px 14px;font-family:'Baloo 2';font-weight:700;color:" + CHDARK, demo: "Which one is green?" },
+        { num: "04", name: "Answer chips", note: "Picture-first fallback for mishears. Dimmed while Chiku talks, teal-bordered on retry.", demoStyle: "margin-top:14px;display:flex;gap:8px", demo: React.createElement(React.Fragment, null, ["#dcecd2", "#fbe6c6", "#d8e6ef"].map((c, i) => React.createElement("div", { key: i, style: { flex: 1, height: 60, borderRadius: 16, background: c, border: i === 0 ? "3px solid " + TEAL : "3px solid transparent" } }))) },
+        { num: "05", name: "Grown-up gate", note: "Two-second press-and-hold, fill from the bottom. No PIN.", demoStyle: "margin-top:14px;display:flex;align-items:center;gap:12px", demo: React.createElement("div", { style: { width: 60, height: 60, borderRadius: 30, border: "2px solid " + INK, background: "linear-gradient(to top, var(--color-accent-700) 42%, var(--color-accent) 42%)" } }) },
+        { num: "06", name: "Sun-to-moon timer", note: "Session length as a sky, not a countdown. Parent sets the arc.", demoStyle: "margin-top:14px", demo: this.sunMoonSvg(0.55, 200) },
+        { num: "07", name: "Pairing card", note: "QR + one instruction, docked in a TV corner for the whole session.", demoStyle: "margin-top:14px;border:3px solid " + INK + ";height:70px;display:flex;align-items:center;gap:10px;padding:8px 12px;font-family:'Baloo 2';font-weight:700;font-size:14px", demo: "Scan with a grown-up's phone" },
+        { num: "08", name: "Celebrate moment", note: "1.2s of confetti and a happy emote, then straight back to the story. No score.", demoStyle: "margin-top:14px;background:" + CREAM + ";border-radius:18px;height:70px;display:flex;align-items:center;justify-content:center;font-family:'Baloo 2';font-weight:700;color:" + TEAL, demo: "పచ్చ · pach-cha · green" }
+      ],
+      icons: [
+        { num: "Option 1", name: "Face on marigold", emote: "happy", note: "Maximum warmth and the highest contrast on a dark home screen. Risk: the trunk detail closes up at 48px.", big: "width:180px;height:180px;border-radius:40px;background:" + MARI + ";overflow:hidden;display:grid;place-items:center", mid: "width:96px;height:96px;border-radius:22px;background:" + MARI + ";overflow:hidden;display:grid;place-items:center", small: "width:48px;height:48px;border-radius:11px;background:" + MARI + ";overflow:hidden;display:grid;place-items:center", inner: "width:120%;height:120%" },
+        { num: "Option 2", name: "Listening ring", emote: "listening", note: "Puts the product idea in the icon — the ring says 'this one hears you'. Busiest of the three.", big: "width:180px;height:180px;border-radius:40px;background:" + CREAM + ";border:6px solid " + TEAL + ";overflow:hidden;display:grid;place-items:center", mid: "width:96px;height:96px;border-radius:22px;background:" + CREAM + ";border:4px solid " + TEAL + ";overflow:hidden;display:grid;place-items:center", small: "width:48px;height:48px;border-radius:11px;background:" + CREAM + ";border:3px solid " + TEAL + ";overflow:hidden;display:grid;place-items:center", inner: "width:112%;height:112%" },
+        { num: "Option 3", name: "Trunk crop", emote: "idle", note: "Crops hard into the trunk curl and one ear. Reads as a mark rather than a portrait, and holds at 48px. Recommended.", big: "width:180px;height:180px;border-radius:40px;background:" + CHIKU + ";overflow:hidden;display:grid;place-items:center", mid: "width:96px;height:96px;border-radius:22px;background:" + CHIKU + ";overflow:hidden;display:grid;place-items:center", small: "width:48px;height:48px;border-radius:11px;background:" + CHIKU + ";overflow:hidden;display:grid;place-items:center", inner: "width:190%;height:190%;transform:translate(-14%,14%)" }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

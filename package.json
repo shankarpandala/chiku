@@ -3,17 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "node": ">=20"
   },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+  "scripts": {
+    "dev": "pnpm --filter @chiku/web dev",
+    "dev:api": "pnpm --filter @chiku/api dev",
+    "dev:prototype": "pnpm --filter @chiku/prototype dev",
+    "ingest": "tsx scripts/ingest-design.ts",
+    "typecheck": "pnpm -r --filter=!@chiku/prototype run typecheck && tsc --noEmit -p scripts/tsconfig.json",
+    "test": "pnpm -r --filter=!@chiku/prototype run test && vitest run"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.0"
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }
