@@ -25,6 +25,28 @@ Companion to `chiku-design-brief.md` and the Claude Design exports. This documen
 > 6. **M0 acceptance (adjusted):** monorepo + CI (typecheck+test), ingest passing against the
 >    real exports, and a *local* dev server rendering the idle Chiku rig with design tokens.
 
+> ## Amendment (v0.2, 2026-08-06 — vendor compliance, VERIFIED)
+>
+> **Gemini may not be used on any Chiku surface.** The Gemini API Additional Terms
+> (effective 2026-03-23) state: *"You also will not use the Services as part of a
+> website, application, or other service … that is directed towards or is likely to
+> be accessed by individuals under the age of 18."* Chiku is for ages 3–8, so this
+> is a terms violation, not a privacy trade-off. Use Restrictions further limit the
+> API to *"professional or business purposes, not for consumer use."*
+> Source: https://ai.google.dev/gemini-api/terms (verified 2026-08-06).
+>
+> Consequences:
+> - **D3 is void.** The `Brain` interface stays; the Gemini implementation is gated
+>   behind an explicit acknowledgement env and is defensible only for adult-operated
+>   QA on synthetic input (`services/api/src/providers/brain/index.ts`).
+> - **The §14 "Gemini free tier → Vertex" escape hatch does not obviously work** —
+>   Vertex's own age clause was NOT independently confirmed. Verify before relying on it.
+> - Any future hosted LLM must be from a vendor that permits minor-directed products
+>   (OpenAI and Anthropic both publish guidance for serving minors) — with a paid,
+>   zero-retention tier, or no hosted LLM at all.
+> - **§9.8 (new invariant): no vendor may be introduced on a kid surface without a
+>   written check of its terms for an under-18 clause.** Record the check in the PR.
+
 ## 1. What we're building (prototype scope)
 
 A single responsive web PWA where an animated character (Chiku) plays authored episodes and short live "calls," pausing at checkpoints to genuinely listen to a child (ages 3–8, Telugu + Indian English) and respond. Three surfaces from one codebase: web, mobile PWA, and TV via a **Stage & Mic** pairing pattern (TV renders the character; a paired phone is the microphone and remote).

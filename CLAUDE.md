@@ -9,6 +9,10 @@ responds. The full spec is `docs/chiku-architecture.md` — read it before struc
 - TypeScript strict everywhere; zod-validate every boundary (episode files, RTDB reads, API IO).
 - No new dependencies without a one-line justification in the PR description.
 - Vendor calls only via the `Brain`/`Voice` interfaces in `services/api/src/providers/`.
+- **No vendor goes on a kid surface without checking its terms for an under-18
+  clause, and recording that check in the PR.** Gemini is already ruled out: its
+  terms forbid services "directed towards … individuals under the age of 18"
+  (verified 2026-08-06). This is a hard gate, not a preference.
 - Never commit secrets; keep `.env.example` current. The web app has zero secrets —
   no `VITE_*` var may hold a key or token.
 - Don't edit `design/` by hand — it holds Claude Design exports, regenerated upstream.
