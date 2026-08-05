@@ -180,6 +180,275 @@ body {
   box-shadow: 0 5px 0 #d1832a;
 }
 
+/* Home: parent button, episode cards */
+.home-parent {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid #e7dcc8;
+  background: var(--kid-cream);
+  color: var(--kid-chiku-dark);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.home-episodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+}
+
+.home-episode-card {
+  font-family: var(--font-kid);
+  font-size: clamp(17px, 2.8vmin, 22px);
+  font-weight: 700;
+  color: var(--kid-ink);
+  background: #e4ecdd;
+  border: 2px solid #e7dcc8;
+  border-radius: 24px;
+  padding: 18px 26px;
+  min-height: 88px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.home-episode-play {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--kid-marigold);
+  color: #5d4a20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.home-episode-sub {
+  font-weight: 500;
+  font-size: 0.85em;
+  color: var(--kid-chiku-dark);
+}
+
+.home-note {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-neutral-600);
+}
+
+/* Player: video placeholder */
+.player-video {
+  background: #4a5c3f;
+  color: #cbd8c0;
+  border-radius: 28px;
+  padding: 28px 48px;
+  text-align: center;
+}
+
+.player-video-label {
+  margin: 0;
+  font-size: clamp(20px, 4vmin, 30px);
+  font-weight: 800;
+}
+
+.player-video-src {
+  margin: 6px 0 0;
+  font-family: var(--font-body);
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.loop-swatch-count {
+  background: var(--kid-sand);
+  color: var(--kid-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+/* Parent room — Modernist chrome (Archivo, square corners) on purpose */
+.parent-gate {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  position: relative;
+}
+
+.gate-circle {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 2px solid var(--color-divider);
+  background: var(--color-surface);
+  cursor: pointer;
+  overflow: hidden;
+  font-family: var(--font-body);
+  color: var(--color-text);
+  touch-action: none;
+}
+
+.gate-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--color-accent-200);
+  transition: height 50ms linear;
+}
+
+.gate-label {
+  position: relative;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.gate-note {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-neutral-600);
+  max-width: 320px;
+  text-align: center;
+}
+
+.parent {
+  min-height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.parent h1,
+.parent h2 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  margin: 0;
+}
+
+.parent h2 {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.parent-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid var(--color-text);
+  padding-bottom: 12px;
+}
+
+.btn-ghost {
+  font-family: var(--font-body);
+  background: none;
+  border: none;
+  color: var(--color-accent-700);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 6px 8px;
+}
+
+.parent-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.parent-tile {
+  background: var(--color-surface);
+  padding: var(--space-4);
+  min-width: 130px;
+}
+
+.parent-tile-value {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 32px;
+}
+
+.parent-tile-label {
+  font-size: 13px;
+  color: var(--color-neutral-700);
+}
+
+.parent-seg {
+  display: inline-flex;
+  border: 1px solid var(--color-divider);
+  width: fit-content;
+}
+
+.parent-seg button {
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 8px 18px;
+  border: none;
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.parent-seg button.is-active {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.parent-lang,
+.parent-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.parent-note {
+  font-size: 13px;
+  color: var(--color-neutral-600);
+  margin: 0;
+}
+
+.parent-transcript table {
+  border-collapse: collapse;
+  width: 100%;
+  max-width: 640px;
+  font-size: 14px;
+}
+
+.parent-transcript th,
+.parent-transcript td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.parent-tag {
+  font-size: 12px;
+  padding: 2px 8px;
+  background: var(--color-neutral-200);
+}
+
+.parent-tag-matched-local,
+.parent-tag-matched-brain {
+  background: var(--color-accent-200);
+}
+
 /* Dev-only "type the answer" strip */
 .dev-say {
   position: fixed;

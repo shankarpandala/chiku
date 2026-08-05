@@ -1,35 +1,63 @@
 {
   "id": "ep001",
-  "title": { "te": "సంతలో రంగులు", "en": "Colours at the Market" },
-  "langs": ["te", "en"],
+  "title": {
+    "te": "సంతలో రంగులు",
+    "en": "Colours at the Market"
+  },
+  "langs": [
+    "te",
+    "en"
+  ],
   "segments": [
-    { "type": "video", "src": "seg1.mp4" },
+    {
+      "type": "video",
+      "src": "seg1.mp4"
+    },
     {
       "type": "checkpoint",
       "id": "cp1",
       "ask": {
-        "audio": { "te": "cp1_ask_te.mp3", "en": "cp1_ask_en.mp3" },
-        "marks": "cp1_marks.json"
+        "audio": {
+          "te": "cp1_ask_te.m4a",
+          "en": "cp1_ask_en.m4a"
+        },
+        "marks": {
+          "te": "cp1_ask_te.marks.json",
+          "en": "cp1_ask_en.marks.json"
+        }
       },
       "listenMs": 6000,
       "expect": [
         {
           "id": "green",
-          "match": ["green", "paccha", "pachcha", "pacha", "పచ్చ", "ఆకుపచ్చ", "hara"],
+          "match": [
+            "green",
+            "paccha",
+            "pachcha",
+            "pacha",
+            "పచ్చ",
+            "ఆకుపచ్చ",
+            "hara"
+          ],
           "praise": {
             "audio": {
-              "te": "cp1_praise_green_te.mp3",
-              "en": "cp1_praise_green_en.mp3"
+              "te": "cp1_praise_green_te.m4a",
+              "en": "cp1_praise_green_en.m4a"
             }
           }
         },
         {
           "id": "leaf",
-          "match": ["leaf", "aaku", "aku", "ఆకు"],
+          "match": [
+            "leaf",
+            "aaku",
+            "aku",
+            "ఆకు"
+          ],
           "praise": {
             "audio": {
-              "te": "cp1_praise_leaf_te.mp3",
-              "en": "cp1_praise_leaf_en.mp3"
+              "te": "cp1_praise_leaf_te.m4a",
+              "en": "cp1_praise_leaf_en.m4a"
             }
           }
         }
@@ -41,23 +69,39 @@
       },
       "escalate": true
     },
-    { "type": "video", "src": "seg2.mp4" },
+    {
+      "type": "video",
+      "src": "seg2.mp4"
+    },
     {
       "type": "checkpoint",
       "id": "cp2",
       "ask": {
-        "audio": { "te": "cp2_ask_te.mp3", "en": "cp2_ask_en.mp3" },
-        "marks": "cp2_marks.json"
+        "audio": {
+          "te": "cp2_ask_te.m4a",
+          "en": "cp2_ask_en.m4a"
+        },
+        "marks": {
+          "te": "cp2_ask_te.marks.json",
+          "en": "cp2_ask_en.marks.json"
+        }
       },
       "listenMs": 7000,
       "expect": [
         {
           "id": "three",
-          "match": ["three", "moodu", "mudu", "muudu", "మూడు", "3"],
+          "match": [
+            "three",
+            "moodu",
+            "mudu",
+            "muudu",
+            "మూడు",
+            "3"
+          ],
           "praise": {
             "audio": {
-              "te": "cp2_praise_three_te.mp3",
-              "en": "cp2_praise_three_en.mp3"
+              "te": "cp2_praise_three_te.m4a",
+              "en": "cp2_praise_three_en.m4a"
             }
           }
         }
@@ -69,33 +113,57 @@
       },
       "escalate": true
     },
-    { "type": "video", "src": "seg3.mp4" },
+    {
+      "type": "video",
+      "src": "seg3.mp4"
+    },
     {
       "type": "checkpoint",
       "id": "cp3",
       "ask": {
-        "audio": { "te": "cp3_ask_te.mp3", "en": "cp3_ask_en.mp3" },
-        "marks": "cp3_marks.json"
+        "audio": {
+          "te": "cp3_ask_te.m4a",
+          "en": "cp3_ask_en.m4a"
+        },
+        "marks": {
+          "te": "cp3_ask_te.marks.json",
+          "en": "cp3_ask_en.marks.json"
+        }
       },
       "listenMs": 6000,
       "expect": [
         {
           "id": "red",
-          "match": ["red", "erupu", "yerupu", "erra", "yerra", "ఎరుపు", "ఎర్ర", "lal"],
+          "match": [
+            "red",
+            "erupu",
+            "yerupu",
+            "erra",
+            "yerra",
+            "ఎరుపు",
+            "ఎర్ర",
+            "lal"
+          ],
           "praise": {
             "audio": {
-              "te": "cp3_praise_red_te.mp3",
-              "en": "cp3_praise_red_en.mp3"
+              "te": "cp3_praise_red_te.m4a",
+              "en": "cp3_praise_red_en.m4a"
             }
           }
         },
         {
           "id": "tomato",
-          "match": ["tomato", "tamata", "tamaata", "టమాటా", "టమోటా"],
+          "match": [
+            "tomato",
+            "tamata",
+            "tamaata",
+            "టమాటా",
+            "టమోటా"
+          ],
           "praise": {
             "audio": {
-              "te": "cp3_praise_tomato_te.mp3",
-              "en": "cp3_praise_tomato_en.mp3"
+              "te": "cp3_praise_tomato_te.m4a",
+              "en": "cp3_praise_tomato_en.m4a"
             }
           }
         }
@@ -103,37 +171,59 @@
       "onMiss": {
         "retryAudio": "cp3_retry",
         "maxRetries": 1,
-        "fallbackAudio": "lets_say_together"
+        "fallbackAudio": "cp3_together"
       },
       "escalate": true
     },
-    { "type": "video", "src": "seg4.mp4" },
+    {
+      "type": "video",
+      "src": "seg4.mp4"
+    },
     {
       "type": "checkpoint",
       "id": "cp4",
       "ask": {
-        "audio": { "te": "cp4_ask_te.mp3", "en": "cp4_ask_en.mp3" },
-        "marks": "cp4_marks.json"
+        "audio": {
+          "te": "cp4_ask_te.m4a",
+          "en": "cp4_ask_en.m4a"
+        },
+        "marks": {
+          "te": "cp4_ask_te.marks.json",
+          "en": "cp4_ask_en.marks.json"
+        }
       },
       "listenMs": 6000,
       "expect": [
         {
           "id": "yellow",
-          "match": ["yellow", "pasupu", "pasupu pachcha", "పసుపు", "peela"],
+          "match": [
+            "yellow",
+            "pasupu",
+            "pasupu pachcha",
+            "పసుపు",
+            "peela"
+          ],
           "praise": {
             "audio": {
-              "te": "cp4_praise_yellow_te.mp3",
-              "en": "cp4_praise_yellow_en.mp3"
+              "te": "cp4_praise_yellow_te.m4a",
+              "en": "cp4_praise_yellow_en.m4a"
             }
           }
         },
         {
           "id": "banana",
-          "match": ["banana", "arati", "arati pandu", "aratipandu", "అరటి", "అరటిపండు"],
+          "match": [
+            "banana",
+            "arati",
+            "arati pandu",
+            "aratipandu",
+            "అరటి",
+            "అరటిపండు"
+          ],
           "praise": {
             "audio": {
-              "te": "cp4_praise_banana_te.mp3",
-              "en": "cp4_praise_banana_en.mp3"
+              "te": "cp4_praise_banana_te.m4a",
+              "en": "cp4_praise_banana_en.m4a"
             }
           }
         }
@@ -141,10 +231,13 @@
       "onMiss": {
         "retryAudio": "cp4_retry",
         "maxRetries": 1,
-        "fallbackAudio": "lets_say_together"
+        "fallbackAudio": "cp4_together"
       },
       "escalate": true
     },
-    { "type": "video", "src": "seg5.mp4" }
+    {
+      "type": "video",
+      "src": "seg5.mp4"
+    }
   ]
 }

@@ -14,6 +14,7 @@ import {
 describe("POST /understand IO", () => {
   it("round-trips a request", () => {
     const req = {
+      episodeId: "ep001",
       checkpointId: "cp1",
       utterance: "pachcha",
       lang: "te" as const,
@@ -53,6 +54,7 @@ describe("POST /understand IO", () => {
 
   it("rejects a request with an unsupported lang", () => {
     const bad = {
+      episodeId: "ep001",
       checkpointId: "cp1",
       utterance: "vert",
       lang: "fr",

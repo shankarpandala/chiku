@@ -62,6 +62,10 @@ export const VisemeMarkSchema = z
   .strict();
 export type VisemeMark = z.infer<typeof VisemeMarkSchema>;
 
+/** The contents of a `.marks.json` media file — what §7 `ask.marks` points at. */
+export const VisemeMarksFileSchema = z.array(VisemeMarkSchema);
+export type VisemeMarksFile = z.infer<typeof VisemeMarksFileSchema>;
+
 // ---------------------------------------------------------------------------
 // Episode content (§7 "Episode") — authored files, so schemas are .strict():
 // a typo in hand-authored JSON must fail loudly, not be silently stripped.
@@ -103,8 +107,9 @@ export const CheckpointSegmentSchema = z
     ask: z
       .object({
         audio: LocalizedAudioSchema,
-        /** Viseme-marks file for the ask line (optional until rendered). */
-        marks: z.string().min(1).optional(),
+        /** Viseme-marks files, per language — te and en audio time differently
+         *  (optional until rendered; amplitude fallback covers the gap). */
+        marks: LocalizedAudioSchema.optional(),
       })
       .strict(),
     /** How long the mic stays open before the retry path kicks in. */
@@ -210,6 +215,8 @@ export type RoomState = z.infer<typeof RoomStateSchema>;
 // ---------------------------------------------------------------------------
 
 export const UnderstandRequestSchema = z.object({
+  /** Checkpoint ids are episode-scoped (§7 Episode), so the brain needs both. */
+  episodeId: z.string().min(1),
   checkpointId: z.string().min(1),
   utterance: z.string(),
   lang: LangSchema,

@@ -15,5 +15,10 @@
   "remote.holdToTalk": "Hold to talk",
   "remote.chikuHears": "Chiku hears you",
   "call.waveGoodbye": "Wave goodbye",
-  "loop.micOff": "Chiku's ears are off — a grown-up can help"
+  "loop.micOff": "Chiku's ears are off — a grown-up can help",
+  "player.thinking": "Chiku is thinking…",
+  "player.watch": "Watch!",
+  "player.theEnd": "The end! Wave goodbye!",
+  "player.offline": "Chiku is napping — try again soon!",
+  "home.apiDown": "Episodes are asleep (grown-ups: start the API)"
 }

@@ -16,7 +16,7 @@ const validCheckpoint = () => ({
   id: "cpX",
   ask: {
     audio: { te: "cpX_ask_te.mp3", en: "cpX_ask_en.mp3" },
-    marks: "cpX_marks.json",
+    marks: { te: "cpX_ask_te.marks.json", en: "cpX_ask_en.marks.json" },
   },
   listenMs: 6000,
   expect: [
@@ -121,8 +121,14 @@ describe("Episode schema rejections", () => {
   it("rejects a checkpoint whose ask audio is missing te", () => {
     const cp = {
       ...validCheckpoint(),
-      ask: { audio: { en: "cpX_ask_en.mp3" }, marks: "cpX_marks.json" },
+      ask: { audio: { en: "cpX_ask_en.mp3" } },
     };
+    expect(CheckpointSegmentSchema.safeParse(cp).success).toBe(false);
+  });
+
+  it("rejects half-localized marks (te and en time differently)", () => {
+    const base = validCheckpoint();
+    const cp = { ...base, ask: { audio: base.ask.audio, marks: { en: "cpX_ask_en.marks.json" } } };
     expect(CheckpointSegmentSchema.safeParse(cp).success).toBe(false);
   });
 

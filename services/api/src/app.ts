@@ -1,4 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import path from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -7,10 +8,14 @@ import {
   EpisodeSchema,
   SpeakRequestSchema,
   UnderstandRequestSchema,
+  UnderstandResponseSchema,
   type EpisodeIndex,
+  type UnderstandResponse,
 } from "@chiku/schema";
+import { loadEpisode, mediaFilePath, MEDIA_CONTENT_TYPES } from "./episodes";
 import { episodesDir, resolveMediaDir } from "./media";
 import { rateLimit, type RateLimitOptions } from "./middleware/rate-limit";
+import { selectBrain, type Brain } from "./providers/brain";
 
 /** §13 default — the local Vite dev server for apps/web. */
 export const DEFAULT_ALLOWED_ORIGIN = "http://localhost:5173";
@@ -22,6 +27,8 @@ export interface AppOptions {
   allowedOrigin?: string;
   /** Rate-limit tuning (tests). */
   rateLimit?: RateLimitOptions;
+  /** Brain override (tests). Default: selectBrain() from the environment. */
+  brain?: Brain;
 }
 
 /**
@@ -53,6 +60,8 @@ export function createApp(options: AppOptions = {}): Hono {
     return c.json({ error: "internal error" }, 500);
   });
 
+  const brain = options.brain ?? selectBrain(mediaDir);
+
   app.get("/healthz", (c) => c.json({ ok: true }));
 
   app.get("/episodes", async (c) => {
@@ -60,8 +69,34 @@ export function createApp(options: AppOptions = {}): Hono {
     return c.json(index);
   });
 
-  // M2 contracts: request bodies are zod-validated now; the Brain/Voice
-  // providers behind them are stubs until M2.
+  app.get("/episodes/:id", async (c) => {
+    const episode = await loadEpisode(mediaDir, c.req.param("id"));
+    if (episode === null) return c.json({ error: "unknown episode" }, 404);
+    return c.json(episode);
+  });
+
+  app.get("/media/episodes/:id/:file", async (c) => {
+    const filePath = mediaFilePath(mediaDir, c.req.param("id"), c.req.param("file"));
+    if (filePath === null) return c.json({ error: "not found" }, 404);
+    let size: number;
+    try {
+      size = (await stat(filePath)).size;
+    } catch {
+      return c.json({ error: "not found" }, 404);
+    }
+    const type = MEDIA_CONTENT_TYPES[path.extname(filePath).toLowerCase()] ?? "application/octet-stream";
+    const stream = createReadStream(filePath);
+    return new Response(stream as unknown as BodyInit, {
+      headers: {
+        "content-type": type,
+        "content-length": String(size),
+        "cache-control": "no-store",
+      },
+    });
+  });
+
+  // §8 step 4 — the miss path. The brain is behind the Brain interface (D3);
+  // failures surface as 502 so the client can fall back to its local retry.
   app.post("/understand", async (c) => {
     const body: unknown = await c.req.json().catch(() => undefined);
     const parsed = UnderstandRequestSchema.safeParse(body);
@@ -71,7 +106,29 @@ export function createApp(options: AppOptions = {}): Hono {
         400,
       );
     }
-    return c.json({ error: "not implemented until M2" }, 501);
+    const req = parsed.data;
+    const t0 = performance.now();
+    let response: UnderstandResponse;
+    try {
+      response = UnderstandResponseSchema.parse(await brain.understand(req));
+    } catch (err) {
+      // Never the utterance text in logs — transcripts stay client-side (§9).
+      console.warn(
+        `[chiku-api] understand ${req.episodeId}/${req.checkpointId} brain failed after ${(performance.now() - t0).toFixed(0)}ms:`,
+        err instanceof Error ? err.message : err,
+      );
+      return c.json({ error: "brain-unavailable" }, 502);
+    }
+    // Contract enforcement: a praise must name one of the request's expectIds.
+    if (response.action === "praise" && (response.matchId === null || !req.expectIds.includes(response.matchId))) {
+      response = { matchId: null, action: "retry", reply: { text: "Good try! Say it one more time!" } };
+    }
+    console.log(
+      `[chiku-api] understand ${req.episodeId}/${req.checkpointId} → ${response.action}${
+        response.matchId !== null ? `(${response.matchId})` : ""
+      } in ${(performance.now() - t0).toFixed(0)}ms`,
+    );
+    return c.json(response);
   });
 
   app.post("/speak", async (c) => {

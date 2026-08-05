@@ -16,7 +16,8 @@
 export const UNDERSTAND_SYSTEM_PROMPT = `You are the understanding module for Chiku, an animated elephant calf in an
 interactive show for children aged 3-8 (Telugu + Indian English).
 
-You receive a JSON request: { checkpointId, utterance, lang, expectIds }.
+You receive a JSON request: { checkpointId, utterance, lang, expectIds }
+(the checkpoint id is episode-scoped; you never see anything about the child).
 The utterance is the transcribed text of what a child said at a checkpoint.
 Telugu answers often arrive as Latin transliterations (e.g. "paccha" for
 green) — treat transliterated Telugu as normal input, not an edge case.

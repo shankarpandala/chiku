@@ -1,15 +1,17 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { EpisodeIndexSchema } from "@chiku/schema";
+import { EpisodeIndexSchema, EpisodeSchema, type UnderstandResponse } from "@chiku/schema";
 import { createApp } from "../src/app";
+import { RuleBrain } from "../src/providers/brain/rule";
+import type { Brain } from "../src/providers/brain/types";
 
 // Fixture media root (decoupled from content/episodes/, which is authored
 // in parallel — see the M0 task split).
 const FIXTURE_MEDIA = fileURLToPath(new URL("fixtures/media", import.meta.url));
 const ORIGIN = "http://localhost:5173";
 
-function makeApp() {
-  return createApp({ mediaDir: FIXTURE_MEDIA, allowedOrigin: ORIGIN });
+function makeApp(brain: Brain = new RuleBrain(FIXTURE_MEDIA)) {
+  return createApp({ mediaDir: FIXTURE_MEDIA, allowedOrigin: ORIGIN, brain });
 }
 
 describe("GET /healthz", () => {
@@ -57,8 +59,51 @@ describe("CORS origin lock", () => {
   });
 });
 
-describe("POST /understand (contract wired, brain stubbed)", () => {
+describe("GET /episodes/:id", () => {
+  it("returns the full, schema-valid episode", async () => {
+    const res = await makeApp().request("/episodes/ep001");
+    expect(res.status).toBe(200);
+    const ep = EpisodeSchema.parse(await res.json());
+    expect(ep.id).toBe("ep001");
+    expect(ep.segments).toHaveLength(2);
+  });
+
+  it("404s an unknown id and a traversal attempt", async () => {
+    expect((await makeApp().request("/episodes/nope")).status).toBe(404);
+    expect((await makeApp().request("/episodes/..%2F..%2Fetc")).status).toBe(404);
+  });
+});
+
+describe("GET /media/episodes/:id/:file", () => {
+  it("serves audio with the right content-type", async () => {
+    const res = await makeApp().request("/media/episodes/ep001/cp1_ask_en.m4a");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("audio/mp4");
+    expect(Number(res.headers.get("content-length"))).toBeGreaterThan(0);
+  });
+
+  it("serves marks JSON", async () => {
+    const res = await makeApp().request("/media/episodes/ep001/cp1_ask_en.marks.json");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/json");
+  });
+
+  it("404s missing files and traversal attempts", async () => {
+    expect((await makeApp().request("/media/episodes/ep001/missing.m4a")).status).toBe(404);
+    expect((await makeApp().request("/media/episodes/ep001/..%2Fepisode.json")).status).toBe(404);
+    expect((await makeApp().request("/media/episodes/..%2Fep001/cp1_ask_en.m4a")).status).toBe(404);
+  });
+});
+
+describe("POST /understand (§8 step 4)", () => {
+  const post = (app: ReturnType<typeof makeApp>, body: unknown) =>
+    app.request("/understand", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
   const valid = {
+    episodeId: "ep001",
     checkpointId: "cp1",
     utterance: "paccha",
     lang: "te",
@@ -66,24 +111,57 @@ describe("POST /understand (contract wired, brain stubbed)", () => {
   };
 
   it("rejects an invalid body with 400", async () => {
-    const res = await makeApp().request("/understand", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ utterance: 42 }),
-    });
+    const res = await post(makeApp(), { utterance: 42 });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("invalid request body");
   });
 
-  it("returns 501 for a valid body until M2", async () => {
-    const res = await makeApp().request("/understand", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(valid),
-    });
-    expect(res.status).toBe(501);
-    expect(await res.json()).toEqual({ error: "not implemented until M2" });
+  it("RuleBrain praises a transliteration", async () => {
+    const res = await post(makeApp(), valid);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ matchId: "green", action: "praise" });
+  });
+
+  it("RuleBrain praises a synonym the client matcher would miss", async () => {
+    const res = await post(makeApp(), { ...valid, utterance: "it is like emerald", lang: "en" });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as UnderstandResponse).action).toBe("praise");
+  });
+
+  it("RuleBrain retries an on-topic miss with a short warm line", async () => {
+    const res = await post(makeApp(), { ...valid, utterance: "blue", lang: "en" });
+    const body = (await res.json()) as UnderstandResponse;
+    expect(body.action).toBe("retry");
+    expect(body.matchId).toBeNull();
+    expect(body.reply?.text.split(" ").length).toBeLessThanOrEqual(12);
+  });
+
+  it("RuleBrain redirects personal probes without engaging (§7)", async () => {
+    const res = await post(makeApp(), { ...valid, utterance: "what is your name", lang: "en" });
+    const body = (await res.json()) as UnderstandResponse;
+    expect(body.action).toBe("redirect");
+    expect(body.matchId).toBeNull();
+  });
+
+  it("502s when the brain dies — the client falls back locally", async () => {
+    const dead: Brain = {
+      understand: () => Promise.reject(new Error("boom")),
+    };
+    const res = await post(makeApp(dead), valid);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "brain-unavailable" });
+  });
+
+  it("clamps a praise whose matchId is not among expectIds to a retry", async () => {
+    const rogue: Brain = {
+      understand: () => Promise.resolve({ matchId: "purple", action: "praise" }),
+    };
+    const res = await post(makeApp(rogue), valid);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as UnderstandResponse;
+    expect(body.action).toBe("retry");
+    expect(body.matchId).toBeNull();
   });
 });
 
