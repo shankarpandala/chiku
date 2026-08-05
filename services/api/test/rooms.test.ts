@@ -9,6 +9,7 @@ import {
   type RoomState,
 } from "@chiku/schema";
 import { createApp } from "../src/app";
+import { selectBrain } from "../src/providers/brain";
 import { RuleBrain } from "../src/providers/brain/rule";
 import {
   freshRoomState,
@@ -295,5 +296,29 @@ describe("POST /rooms", () => {
     expect(body.code).toMatch(CODE_RE);
     // The minted room is live in the shared registry the WS hub uses.
     expect(rooms.room(body.code)).toBeDefined();
+  });
+});
+
+// --- vendor compliance gate (see providers/brain/index.ts) -------------------
+
+describe("brain selection is compliance-gated", () => {
+  it("never auto-selects Gemini just because a key is present", () => {
+    const brain = selectBrain("/tmp", { GEMINI_API_KEY: "sk-test" } as NodeJS.ProcessEnv);
+    expect(brain).toBeInstanceOf(RuleBrain);
+  });
+
+  it("refuses BRAIN=gemini without the explicit under-18 acknowledgement", () => {
+    expect(() =>
+      selectBrain("/tmp", { BRAIN: "gemini", GEMINI_API_KEY: "sk-test" } as NodeJS.ProcessEnv),
+    ).toThrow(/under-18/i);
+  });
+
+  it("allows it only with the acknowledgement (adult QA path)", () => {
+    const brain = selectBrain("/tmp", {
+      BRAIN: "gemini",
+      GEMINI_API_KEY: "sk-test",
+      I_ACKNOWLEDGE_GEMINI_IS_NOT_FOR_UNDER_18_SURFACES: "true",
+    } as NodeJS.ProcessEnv);
+    expect(brain).not.toBeInstanceOf(RuleBrain);
   });
 });
