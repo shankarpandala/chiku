@@ -10,7 +10,8 @@ Monorepo (pnpm). See `docs/chiku-architecture.md` for the architecture handoff a
 
 | Path | What |
 | --- | --- |
-| `apps/web` | The product PWA — all surfaces (home, player, call, stage, mic, parent) |
+| `apps/live` | **Chiku Live** — the realtime surface: Chiku sees you and you answer with your body (camera never leaves the device) |
+| `apps/web` | The episode player — authored episodes, checkpoints, TV stage + phone mic (tag `v0.1-episodes`) |
 | `apps/prototype` | The v0.1 design prototype (frozen reference; `pnpm dev:prototype`) |
 | `packages/schema` | zod contracts — Episode, RoomState, API IO |
 | `packages/rig` | Framework-agnostic character rig (state machine, visemes, blink) |
@@ -24,7 +25,8 @@ Monorepo (pnpm). See `docs/chiku-architecture.md` for the architecture handoff a
 ```sh
 corepack pnpm install
 corepack pnpm ingest      # design/ -> packages/tokens/generated/
-corepack pnpm dev         # web app on :5173
+corepack pnpm dev         # episode player on :5173
+corepack pnpm dev:live    # Chiku Live on :5175 (first run: pnpm --filter @chiku/live vendor:vision)
 ```
 
 Quality gate: `corepack pnpm typecheck && corepack pnpm test`.

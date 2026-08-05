@@ -1,0 +1,364 @@
+/* Chiku Live — same kid ground as apps/web (cream, ink, Baloo, 64px targets,
+   one marigold action per screen), with one new object: the STAGE.
+
+   The stage is a video-call frame. The child is inside it and so is Chiku, in
+   one rounded picture, because the whole illusion is "we are in the same room".
+   The teal glow lives on that frame — teal is reserved for "Chiku is attending
+   to you" (§9), and the live rig deliberately wears no UI of its own. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--kid-cream);
+  color: var(--kid-ink);
+  font-family: var(--font-kid);
+  /* A child holds the device; nothing here should rubber-band or select. */
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: none;
+}
+
+.te {
+  font-family: var(--font-kid-te);
+}
+
+/* Kid-surface focus ring from the design: 5px teal, 4px offset, never colour alone. */
+:focus-visible {
+  outline: 5px solid var(--kid-teal);
+  outline-offset: 4px;
+}
+
+/* --- layout ------------------------------------------------------------- */
+
+.live {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 2.6vmin, 28px);
+  padding: clamp(14px, 3vmin, 32px);
+  padding-bottom: max(clamp(14px, 3vmin, 32px), env(safe-area-inset-bottom));
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(8px, 1.6vmin, 16px);
+  text-align: center;
+  max-width: min(92vw, 640px);
+}
+
+/* --- the stage ----------------------------------------------------------- */
+
+.stage {
+  position: relative;
+  width: min(92vw, 620px);
+  aspect-ratio: 4 / 3;
+  border-radius: 36px;
+  background: var(--kid-sand);
+  overflow: hidden;
+  box-shadow: 0 6px 0 #e2d3b6;
+  transition: box-shadow 180ms ease-out;
+}
+
+/* "Chiku is attending to you" — the RESERVED teal, on the frame. */
+.stage.is-attending {
+  box-shadow:
+    0 0 0 6px var(--kid-teal),
+    0 0 28px 6px color-mix(in srgb, var(--kid-teal) 42%, transparent),
+    0 6px 0 #e2d3b6;
+}
+
+.stage-video-well {
+  position: absolute;
+  inset: 0;
+  background: #e7dcc8;
+}
+
+.stage-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirrored: a child raising their right hand must see it on their right. */
+  transform: scaleX(-1);
+}
+
+/* No camera: fade the sink out rather than `display: none`. A hidden <video>
+   is allowed to stop producing frames (Safari does), which would silently
+   starve the tracker the moment the camera is switched on. */
+.stage.no-camera .stage-video-well {
+  background: transparent;
+}
+
+.stage.no-camera .stage-video {
+  opacity: 0;
+}
+
+/* Chiku sits beside the child, bottom-right, feet in the same frame. */
+.stage-chiku {
+  position: absolute;
+  right: 1.5%;
+  bottom: -2%;
+  width: 40%;
+  aspect-ratio: 224 / 212;
+  filter: drop-shadow(0 6px 10px rgb(44 42 53 / 22%));
+}
+
+/* No camera: Chiku takes the whole frame rather than sharing it with a void. */
+.stage.no-camera .stage-chiku {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 62%;
+}
+
+/* The cue pill, bottom-left of the frame, out of Chiku's way. */
+.stage-cue {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  margin: 0;
+  padding: 8px 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--kid-ink) 62%, transparent);
+  color: var(--kid-cream);
+  font-size: clamp(15px, 2vmin, 19px);
+  font-weight: 700;
+}
+
+.stage-cue.is-live {
+  background: var(--kid-teal);
+}
+
+/* --- copy ---------------------------------------------------------------- */
+
+/* Both scripts, always. Primary loud, other quieter but never hidden. */
+.bi {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.bi-inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.bi-other {
+  font-size: 0.72em;
+  font-weight: 600;
+  opacity: 0.72;
+}
+
+.live-greeting,
+.live-prompt {
+  margin: 0;
+  font-size: clamp(24px, 4.6vmin, 44px);
+  font-weight: 800;
+  color: var(--kid-chiku-dark);
+  line-height: 1.15;
+}
+
+.live-prompt {
+  color: var(--kid-ink);
+}
+
+.live-praise {
+  margin: 0;
+  font-size: clamp(26px, 5vmin, 48px);
+  font-weight: 800;
+  color: var(--kid-leaf);
+}
+
+.live-kidline {
+  margin: 0;
+  font-size: clamp(17px, 2.6vmin, 24px); /* 17px floor from the design system */
+  font-weight: 600;
+}
+
+.live-retry {
+  margin: 0;
+  font-size: clamp(17px, 2.4vmin, 22px);
+  font-weight: 700;
+  color: var(--kid-chiku-dark);
+}
+
+.live-note,
+.live-taphint {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--kid-ink);
+  opacity: 0.8;
+}
+
+/* Grown-up chrome: the promise is for a reader, so it uses the body face. */
+.live-promise {
+  margin: 4px 0 0;
+  max-width: 46ch;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--color-neutral-600);
+}
+
+.live-promise .bi-other {
+  font-size: 0.95em;
+}
+
+/* --- actions ------------------------------------------------------------- */
+
+.big-btn {
+  font-family: var(--font-kid);
+  font-size: clamp(18px, 3.2vmin, 28px);
+  font-weight: 700;
+  border: none;
+  border-radius: 28px;
+  padding: 16px 38px;
+  min-height: 72px;
+  min-width: 200px;
+  cursor: pointer;
+}
+
+.big-btn-primary {
+  color: #5d4a20;
+  background: var(--kid-marigold);
+  box-shadow: 0 5px 0 #d1832a;
+}
+
+.big-btn-quiet {
+  color: var(--kid-ink);
+  background: var(--kid-sand);
+  box-shadow: 0 5px 0 #e2d3b6;
+}
+
+.big-btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #d1832a;
+}
+
+.big-btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* The "no thanks" path is quiet, but it is a real 64px target, not a link. */
+.live-quiet {
+  font-family: var(--font-kid);
+  font-size: clamp(16px, 2.2vmin, 20px);
+  font-weight: 700;
+  color: var(--kid-chiku-dark);
+  background: none;
+  border: 2px solid #e7dcc8;
+  border-radius: 22px;
+  padding: 12px 24px;
+  min-height: 64px;
+  cursor: pointer;
+}
+
+/* --- tap answers --------------------------------------------------------- */
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: clamp(10px, 1.8vmin, 18px);
+}
+
+.choice {
+  width: clamp(88px, 14vmin, 132px);
+  height: clamp(88px, 14vmin, 132px);
+  border-radius: 28px;
+  border: 3px solid #e7dcc8;
+  background: var(--kid-sand);
+  color: var(--kid-ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 5px 0 #e2d3b6;
+}
+
+.choice:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #e2d3b6;
+}
+
+/* A gentle miss: a wobble and a rose edge. Never red, never an X. */
+.choice.is-nudged {
+  border-color: var(--kid-rose);
+  animation: choice-wobble 480ms ease-in-out;
+}
+
+@keyframes choice-wobble {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-5deg);
+  }
+  75% {
+    transform: rotate(5deg);
+  }
+}
+
+.choice-digit {
+  font-size: clamp(38px, 7vmin, 64px);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.glyph {
+  width: 58%;
+  height: 58%;
+}
+
+/* --- streak -------------------------------------------------------------- */
+
+.streak {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 0;
+}
+
+.star {
+  width: 34px;
+  height: 34px;
+  fill: #e7dcc8;
+}
+
+.star.is-filled {
+  fill: var(--kid-marigold);
+}
+
+/* --- reduced motion ------------------------------------------------------
+   The rig is already built static (reducedMotion is passed to createLiveRig);
+   this kills the CSS side: the wobble, the glow transition, the press. */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .big-btn:active:not(:disabled),
+  .choice:active {
+    transform: none;
+  }
+}

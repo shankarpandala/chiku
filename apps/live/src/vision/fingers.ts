@@ -1,0 +1,241 @@
+/**
+ * Finger counting — pure maths over MediaPipe hand landmarks.
+ *
+ * No MediaPipe import here on purpose: the counting logic is the part that has
+ * to be right, so it must be unit-testable without a WASM runtime.
+ *
+ * WHY ANGLES AND NOT DISTANCES
+ * ----------------------------
+ * The heuristic every tutorial reaches for — "the tip is further from the wrist
+ * than the PIP joint, therefore the finger is extended" — is wrong for a hand
+ * held at any angle to the camera. A finger curled forward, toward the lens,
+ * still projects a tip that sits further from the wrist in image space. It was
+ * measured to overcount by one on 3 of 5 real hands. It is not used here.
+ *
+ * Instead each of index/middle/ring/pinky is scored by the interior angle at
+ * its PIP joint, measured MCP -> PIP -> TIP. Straight finger ~180deg, curled
+ * finger tends to 0deg. The angle is computed in 3D (MediaPipe supplies a z),
+ * which makes it largely invariant to how the hand is rotated.
+ *
+ * The thumb gets its own test. A fixed abduction ratio (thumb-tip distance over
+ * palm width) measured 0.40 on genuinely open palms and 0.85 on thumbs-up, so a
+ * distance ratio conflates "thumb splayed sideways" with "thumb extended" and
+ * cannot separate them. The thumb is therefore scored by its own joint angles:
+ * CMC -> MCP -> IP and MCP -> IP -> TIP, taking the tighter of the two.
+ *
+ * CALIBRATION
+ * -----------
+ * The thresholds below are ADULT-DERIVED. There is no published child-hand
+ * training data for this model, and a five-year-old's fingers are shorter,
+ * fatter and rarely straighten fully — expect the defaults to under-count on
+ * small hands. `calibration.ts` stores a per-child override; run a calibration
+ * pass ("show me five!") before trusting a count on a new child.
+ */
+
+/** A landmark in normalized image space. `z` is optional so fixtures stay 2D. */
+export interface Landmark {
+  readonly x: number;
+  readonly y: number;
+  readonly z?: number;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Landmark indices (MediaPipe hand topology, 21 points)                      */
+/* -------------------------------------------------------------------------- */
+
+export const WRIST = 0;
+
+/** thumb: CMC, MCP, IP, TIP */
+const THUMB = [1, 2, 3, 4] as const;
+/** the four fingers: [MCP, PIP, DIP, TIP] */
+const FINGERS = [
+  [5, 6, 7, 8], // index
+  [9, 10, 11, 12], // middle
+  [13, 14, 15, 16], // ring
+  [17, 18, 19, 20], // pinky
+] as const;
+
+export const HAND_LANDMARK_COUNT = 21;
+
+/* -------------------------------------------------------------------------- */
+/* Thresholds — ADULT-DERIVED. See the calibration note in the file header.    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * PIP interior angle (MCP-PIP-TIP) above which index/middle/ring/pinky counts
+ * as extended. ADULT-DERIVED — needs a per-child calibration pass.
+ */
+export const FINGER_EXTENDED_MIN_ANGLE_DEG = 150;
+
+/**
+ * Minimum of the thumb's two joint angles (CMC-MCP-IP and MCP-IP-TIP) above
+ * which the thumb counts as extended. ADULT-DERIVED — needs a per-child
+ * calibration pass; small thumbs sit lower even when fully out.
+ */
+export const THUMB_EXTENDED_MIN_ANGLE_DEG = 150;
+
+/**
+ * Half-width of the "I genuinely cannot tell" band around a threshold, in
+ * degrees. A finger inside the band is neither confidently extended nor
+ * confidently curled. ADULT-DERIVED.
+ */
+export const AMBIGUITY_BAND_DEG = 8;
+
+/**
+ * How many fingers may sit inside the ambiguity band before the whole hand is
+ * reported as unscoreable. A wrong confident answer ("you showed four!" when
+ * the child showed three) is worse for a 5-year-old than Chiku saying he
+ * didn't quite see it, so this is deliberately strict.
+ */
+export const MAX_AMBIGUOUS_FINGERS = 1;
+
+export interface FingerThresholds {
+  readonly fingerAngleDeg: number;
+  readonly thumbAngleDeg: number;
+  readonly ambiguityBandDeg: number;
+  readonly maxAmbiguousFingers: number;
+}
+
+export const ADULT_THRESHOLDS: FingerThresholds = Object.freeze({
+  fingerAngleDeg: FINGER_EXTENDED_MIN_ANGLE_DEG,
+  thumbAngleDeg: THUMB_EXTENDED_MIN_ANGLE_DEG,
+  ambiguityBandDeg: AMBIGUITY_BAND_DEG,
+  maxAmbiguousFingers: MAX_AMBIGUOUS_FINGERS,
+});
+
+/* -------------------------------------------------------------------------- */
+/* Result                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export type FiveBooleans = readonly [boolean, boolean, boolean, boolean, boolean];
+export type FiveNumbers = readonly [number, number, number, number, number];
+
+export interface HandCount {
+  /** Per-finger extension, thumb first. Best guess even when `total` is null. */
+  readonly extended: FiveBooleans;
+  /** 0..5, or null when the hand is too ambiguous to answer honestly. */
+  readonly total: number | null;
+  /** The measured joint angles in degrees, thumb first — for calibration UI. */
+  readonly anglesDeg: FiveNumbers;
+  /** How many fingers landed inside the ambiguity band. */
+  readonly ambiguousCount: number;
+}
+
+const UNSCOREABLE: HandCount = Object.freeze({
+  extended: [false, false, false, false, false] as FiveBooleans,
+  total: null,
+  anglesDeg: [0, 0, 0, 0, 0] as FiveNumbers,
+  ambiguousCount: HAND_LANDMARK_COUNT,
+});
+
+/* -------------------------------------------------------------------------- */
+/* Geometry                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Interior angle at `b` in the path a -> b -> c, in degrees (0..180).
+ * 3D when the landmarks carry z, planar otherwise.
+ */
+export function angleAtDeg(a: Landmark, b: Landmark, c: Landmark): number {
+  const ax = a.x - b.x;
+  const ay = a.y - b.y;
+  const az = (a.z ?? 0) - (b.z ?? 0);
+  const cx = c.x - b.x;
+  const cy = c.y - b.y;
+  const cz = (c.z ?? 0) - (b.z ?? 0);
+
+  const na = Math.sqrt(ax * ax + ay * ay + az * az);
+  const nc = Math.sqrt(cx * cx + cy * cy + cz * cz);
+  if (na === 0 || nc === 0) return 0;
+
+  const cos = (ax * cx + ay * cy + az * cz) / (na * nc);
+  return (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Counting                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Score one hand. Pure: same landmarks in, same answer out.
+ *
+ * Returns `total: null` when more than `maxAmbiguousFingers` joints sit within
+ * `ambiguityBandDeg` of their threshold, or when the landmark array is not a
+ * complete hand. `extended` still carries the best guess so a debug overlay can
+ * show what the engine nearly decided.
+ */
+export function countExtendedFingers(
+  landmarks: readonly Landmark[] | undefined | null,
+  thresholds: FingerThresholds = ADULT_THRESHOLDS,
+): HandCount {
+  if (!landmarks || landmarks.length < HAND_LANDMARK_COUNT) return UNSCOREABLE;
+
+  const thumb = measureThumb(landmarks);
+  if (thumb === null) return UNSCOREABLE;
+
+  const angles: number[] = [thumb];
+  for (const finger of FINGERS) {
+    const a = measureFinger(landmarks, finger);
+    if (a === null) return UNSCOREABLE;
+    angles.push(a);
+  }
+
+  const extended: boolean[] = [];
+  let ambiguousCount = 0;
+  let total = 0;
+
+  for (let i = 0; i < 5; i += 1) {
+    const angle = angles[i] ?? 0;
+    const threshold = i === 0 ? thresholds.thumbAngleDeg : thresholds.fingerAngleDeg;
+    const isExtended = angle > threshold;
+    if (Math.abs(angle - threshold) < thresholds.ambiguityBandDeg) ambiguousCount += 1;
+    extended.push(isExtended);
+    if (isExtended) total += 1;
+  }
+
+  return {
+    extended: extended as unknown as FiveBooleans,
+    total: ambiguousCount > thresholds.maxAmbiguousFingers ? null : total,
+    anglesDeg: angles as unknown as FiveNumbers,
+    ambiguousCount,
+  };
+}
+
+/** MCP -> PIP -> TIP. Deliberately skips the DIP: it adds noise, not signal. */
+function measureFinger(
+  landmarks: readonly Landmark[],
+  finger: readonly [number, number, number, number],
+): number | null {
+  const mcp = landmarks[finger[0]];
+  const pip = landmarks[finger[1]];
+  const tip = landmarks[finger[3]];
+  if (!mcp || !pip || !tip) return null;
+  return angleAtDeg(mcp, pip, tip);
+}
+
+/**
+ * The thumb's own test: the tighter of its two joint angles. A thumb folded
+ * across the palm bends at the IP even when the MCP looks open, so taking the
+ * minimum is what separates a fist from a thumbs-up.
+ */
+function measureThumb(landmarks: readonly Landmark[]): number | null {
+  const cmc = landmarks[THUMB[0]];
+  const mcp = landmarks[THUMB[1]];
+  const ip = landmarks[THUMB[2]];
+  const tip = landmarks[THUMB[3]];
+  if (!cmc || !mcp || !ip || !tip) return null;
+  return Math.min(angleAtDeg(cmc, mcp, ip), angleAtDeg(mcp, ip, tip));
+}
+
+/**
+ * Open palm for the purposes of wave detection: the four fingers are out. The
+ * thumb is ignored on purpose — children wave with a floppy thumb and requiring
+ * it made waves go unnoticed.
+ */
+export function isOpenPalm(
+  landmarks: readonly Landmark[] | undefined | null,
+  thresholds: FingerThresholds = ADULT_THRESHOLDS,
+): boolean {
+  const count = countExtendedFingers(landmarks, thresholds);
+  return count.extended[1] && count.extended[2] && count.extended[3] && count.extended[4];
+}
