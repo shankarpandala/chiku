@@ -245,6 +245,36 @@ body {
   color: var(--color-neutral-600);
 }
 
+/* Session meter — the only time signal a child sees (§9.5) */
+.loop-sunmoon {
+  position: fixed;
+  top: 16px;
+  right: 20px;
+  width: 120px;
+  height: 39px;
+}
+
+/* 10-foot adjustments (TV stage wraps Player with .tv) */
+.loop.tv {
+  font-size: 1.25vw;
+}
+
+.loop.tv .loop-stage {
+  width: min(60vmin, 560px);
+}
+
+.loop.tv .loop-sunmoon {
+  width: 160px;
+  height: 52px;
+}
+
+/* D-pad focus (design: 6px marigold + scale, never colour alone) */
+[data-focusable]:focus-visible {
+  outline: 6px solid var(--kid-marigold);
+  outline-offset: 4px;
+  transform: scale(1.04);
+}
+
 /* Player: video placeholder */
 .player-video {
   background: #4a5c3f;

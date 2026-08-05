@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n, type Lang } from "../../i18n";
 import { getSession, sessionStats } from "../../session/transcript";
+import {
+  getLimitMinutes,
+  setLimitMinutes,
+  sessionProgress,
+  MIN_LIMIT_MIN,
+  MAX_LIMIT_MIN,
+} from "../../session/cap";
+import { SunMoon } from "../../components/SunMoon";
 
 // The parent room is deliberately the OTHER visual language (Modernist:
 // Archivo, square corners) — the switch itself signals whose room this is.
@@ -69,6 +77,14 @@ function ParentDashboard({ onBack }: { onBack: () => void }) {
   const { lang, setLang } = useI18n();
   const session = getSession();
   const stats = session !== null ? sessionStats(session) : null;
+  // The real cap store (§9.5) is the source of truth; re-read after every
+  // write so the label always shows the clamped, persisted value.
+  const [limit, setLimit] = useState(() => getLimitMinutes());
+
+  const onLimitChange = (value: number): void => {
+    setLimitMinutes(value);
+    setLimit(getLimitMinutes());
+  };
 
   return (
     <main className="parent">
@@ -83,6 +99,30 @@ function ParentDashboard({ onBack }: { onBack: () => void }) {
         <StatTile label="Turns spoken" value={stats?.turns ?? 0} />
         <StatTile label="Words heard" value={stats?.wordsHeard ?? 0} />
         <StatTile label="Answers matched" value={stats?.matched ?? 0} />
+      </section>
+
+      <section className="parent-limit">
+        <h2>Daily limit</h2>
+        <SunMoon t={sessionProgress()} className="parent-sunmoon" />
+        <div className="parent-limit-row">
+          <input
+            type="range"
+            min={MIN_LIMIT_MIN}
+            max={MAX_LIMIT_MIN}
+            step={5}
+            value={limit}
+            onChange={(e) => onLimitChange(Number(e.currentTarget.value))}
+            aria-label="Daily limit in minutes"
+            data-testid="limit-slider"
+          />
+          <span className="parent-limit-value" data-testid="limit-value" aria-live="polite">
+            {limit} minutes
+          </span>
+        </div>
+        <p className="parent-note">
+          The sun above shows where today's session is right now; the sun-to-moon meter on kid
+          screens follows this limit. When the sun sets, Chiku says goodbye — no extensions.
+        </p>
       </section>
 
       <section className="parent-lang">

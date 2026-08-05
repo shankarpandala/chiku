@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Chiku PWA icon source. Head geometry lifted (simplified) from the canon
+     design export (design/ChikuFace.dc.html · apps/prototype/src/ChikuFace.jsx):
+     idle emote, smile mouth, trunk down. Rasterized locally to
+     public/icons/icon-192.png and icon-512.png (see M3 notes). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect x="0" y="0" width="512" height="512" rx="96" fill="#fdf6ec"/>
+  <g transform="translate(256 256) scale(1.55) translate(-120 -104)">
+    <!-- ears (pink inner) -->
+    <ellipse cx="34" cy="98" rx="46" ry="53" fill="#8b7ab0"/>
+    <ellipse cx="24" cy="99" rx="25" ry="31" fill="#e9b6b4"/>
+    <ellipse cx="206" cy="98" rx="46" ry="53" fill="#8b7ab0"/>
+    <ellipse cx="216" cy="99" rx="25" ry="31" fill="#e9b6b4"/>
+    <!-- head + hair sprouts -->
+    <path d="M120 28 C182 28 198 66 198 110 C198 164 166 200 120 200 C74 200 42 164 42 110 C42 66 58 28 120 28 Z" fill="#a293c4"/>
+    <path d="M100 31 C97 19 105 11 113 15" fill="none" stroke="#8b7ab0" stroke-width="7" stroke-linecap="round"/>
+    <path d="M118 28 C120 16 130 10 136 16" fill="none" stroke="#8b7ab0" stroke-width="7" stroke-linecap="round"/>
+    <!-- eyes -->
+    <ellipse cx="88" cy="96" rx="17" ry="17" fill="#fdf6ec"/>
+    <ellipse cx="156" cy="96" rx="17" ry="17" fill="#fdf6ec"/>
+    <circle cx="90" cy="98" r="10" fill="#2c2a35"/>
+    <circle cx="158" cy="98" r="10" fill="#2c2a35"/>
+    <circle cx="82" cy="90" r="3.6" fill="#fdf6ec"/>
+    <circle cx="150" cy="90" r="3.6" fill="#fdf6ec"/>
+    <!-- brows -->
+    <g fill="none" stroke="#2c2a35" stroke-width="6" stroke-linecap="round" opacity=".9">
+      <path d="M76 66 Q88 60 100 64"/>
+      <path d="M144 64 Q156 60 168 66"/>
+    </g>
+    <!-- mouth (smile) -->
+    <path d="M104 168 Q128 203 152 168 Q128 180 104 168 Z" fill="#2c2a35"/>
+    <!-- trunk (down) -->
+    <g fill="none" stroke-linecap="round">
+      <path d="M50 162 C43 155 44 145 51 141" stroke="#7d6da3" stroke-width="27"/>
+      <path d="M84 162 C72 170 58 170 50 162" stroke="#7d6da3" stroke-width="37"/>
+      <path d="M110 122 C104 140 96 154 84 162" stroke="#7d6da3" stroke-width="47"/>
+      <path d="M50 162 C43 155 44 145 51 141" stroke="#a698ca" stroke-width="21"/>
+      <path d="M84 162 C72 170 58 170 50 162" stroke="#a698ca" stroke-width="31"/>
+      <path d="M110 122 C104 140 96 154 84 162" stroke="#a698ca" stroke-width="41"/>
+    </g>
+  </g>
+</svg>

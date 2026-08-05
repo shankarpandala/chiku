@@ -2,3 +2,4 @@
 
 export type { RigState, Viseme, Emote, VisemeMark, RigOptions, Rig, RigAudio, AmplitudeSource } from "./types";
 export { createRig } from "./rig";
+export { defaultCreateAudio } from "./audio";

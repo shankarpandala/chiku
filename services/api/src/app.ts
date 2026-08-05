@@ -3,19 +3,24 @@ import { createReadStream } from "node:fs";
 import path from "node:path";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { createNodeWebSocket, type NodeWebSocket } from "@hono/node-ws";
 import {
+  CreateRoomResponseSchema,
   EpisodeIndexSchema,
   EpisodeSchema,
+  RoomRoleSchema,
   SpeakRequestSchema,
   UnderstandRequestSchema,
   UnderstandResponseSchema,
   type EpisodeIndex,
+  type RoomRole,
   type UnderstandResponse,
 } from "@chiku/schema";
 import { loadEpisode, mediaFilePath, MEDIA_CONTENT_TYPES } from "./episodes";
 import { episodesDir, resolveMediaDir } from "./media";
 import { rateLimit, type RateLimitOptions } from "./middleware/rate-limit";
 import { selectBrain, type Brain } from "./providers/brain";
+import { hubFrame, RoomRegistry, type RoomMember } from "./rooms";
 
 /** §13 default — the local Vite dev server for apps/web. */
 export const DEFAULT_ALLOWED_ORIGIN = "http://localhost:5173";
@@ -29,6 +34,8 @@ export interface AppOptions {
   rateLimit?: RateLimitOptions;
   /** Brain override (tests). Default: selectBrain() from the environment. */
   brain?: Brain;
+  /** Room registry shared with the WS hub (attachRoomHub). Default: fresh. */
+  rooms?: RoomRegistry;
 }
 
 /**
@@ -61,8 +68,15 @@ export function createApp(options: AppOptions = {}): Hono {
   });
 
   const brain = options.brain ?? selectBrain(mediaDir);
+  const rooms = options.rooms ?? new RoomRegistry();
 
   app.get("/healthz", (c) => c.json({ ok: true }));
+
+  // D6 amendment: the stage mints a pairing room on the local hub.
+  // Validated before it leaves the process — zod on every boundary.
+  app.post("/rooms", (c) =>
+    c.json(CreateRoomResponseSchema.parse({ code: rooms.createRoom() }), 201),
+  );
 
   app.get("/episodes", async (c) => {
     const index = await loadEpisodeIndex(episodesDir(mediaDir));
@@ -144,6 +158,64 @@ export function createApp(options: AppOptions = {}): Hono {
   });
 
   return app;
+}
+
+/**
+ * Mount the room-hub WebSocket endpoint (§7 room contract over a local WS
+ * hub — D6 amendment) and return @hono/node-ws's injectWebSocket for the
+ * server in index.ts.
+ *
+ * Kept out of createApp so createApp stays a plain Hono factory for
+ * app.request() tests: createNodeWebSocket must see the same app instance
+ * it upgrades for, so the wiring happens here, after the routes exist.
+ * The endpoint is a thin adapter — all room rules live in RoomRegistry,
+ * which is unit-tested directly.
+ */
+export function attachRoomHub(
+  app: Hono,
+  rooms: RoomRegistry,
+): { injectWebSocket: NodeWebSocket["injectWebSocket"] } {
+  const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+
+  app.get(
+    "/rooms/:code/ws",
+    upgradeWebSocket((c) => {
+      // upgradeWebSocket's context is untyped for path params — default "".
+      const code = (c.req.param("code") ?? "").toUpperCase();
+      const parsedRole = RoomRoleSchema.safeParse(c.req.query("role"));
+      const role: RoomRole | undefined = parsedRole.success ? parsedRole.data : undefined;
+      let member: RoomMember | undefined;
+
+      return {
+        onOpen(_evt, ws) {
+          const socket: RoomMember = {
+            send: (data) => ws.send(data),
+            close: () => ws.close(),
+          };
+          if (role === undefined) {
+            socket.send(hubFrame({ type: "error", message: "role must be stage or mic" }));
+            socket.close();
+            return;
+          }
+          if (rooms.join(code, role, socket)) member = socket;
+        },
+        onMessage(evt) {
+          if (member === undefined || role === undefined) return;
+          // Text frames only — no audio, no binary, ever (§9.1).
+          if (typeof evt.data !== "string") return;
+          rooms.handleMessage(code, role, evt.data, member);
+        },
+        onClose() {
+          if (member !== undefined && role !== undefined) {
+            rooms.leave(code, role, member);
+            member = undefined;
+          }
+        },
+      };
+    }),
+  );
+
+  return { injectWebSocket };
 }
 
 /**

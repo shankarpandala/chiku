@@ -211,6 +211,44 @@ export const RoomStateSchema = z.object({
 export type RoomState = z.infer<typeof RoomStateSchema>;
 
 // ---------------------------------------------------------------------------
+// Room wire protocol — messages over the pairing transport (M3: a local WS
+// hub in services/api; the same contract can ride RTDB later — D6 amendment).
+// §7 rules are baked into the message types: the MIC may only send utterances
+// and control; the STAGE alone publishes `state`.
+// ---------------------------------------------------------------------------
+
+export const RoomRoleSchema = z.enum(["stage", "mic"]);
+export type RoomRole = z.infer<typeof RoomRoleSchema>;
+
+/** Client → hub. The hub additionally enforces role-based write permission. */
+export const RoomClientMessageSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("utterance"), utterance: LastUtteranceSchema }),
+  z.object({
+    type: z.literal("control"),
+    control: z.object({
+      pause: z.boolean().optional(),
+      end: z.boolean().optional(),
+      volume: z.number().min(0).max(1).optional(),
+    }),
+  }),
+  z.object({ type: z.literal("state"), state: RoomStateSchema.shape.state }),
+]);
+export type RoomClientMessage = z.infer<typeof RoomClientMessageSchema>;
+
+/** Hub → clients: full-room snapshots on every change, or a terminal error. */
+export const RoomHubMessageSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("room"), room: RoomStateSchema }),
+  z.object({ type: z.literal("error"), message: z.string() }),
+]);
+export type RoomHubMessage = z.infer<typeof RoomHubMessageSchema>;
+
+export const CreateRoomResponseSchema = z.object({
+  /** 4-char pairing code from an unambiguous alphabet (no 0/O/1/I). */
+  code: z.string().regex(/^[2-9A-HJ-NP-Z]{4}$/),
+});
+export type CreateRoomResponse = z.infer<typeof CreateRoomResponseSchema>;
+
+// ---------------------------------------------------------------------------
 // API IO (§7 "API") — Hono service contracts
 // ---------------------------------------------------------------------------
 

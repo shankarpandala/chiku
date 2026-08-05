@@ -1,29 +1,51 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Episode } from "@chiku/schema";
+import type { Episode, RoomPhase } from "@chiku/schema";
 import { VisemeMarksFileSchema } from "@chiku/schema";
 import type { Rig, VisemeMark } from "@chiku/rig";
 import { ChikuRig } from "../../rig/ChikuRig";
+import { SunMoon } from "../../components/SunMoon";
 import { useI18n } from "../../i18n";
 import { createWebSpeech, type SpeechEngine } from "../../speech/webspeech";
 import { fetchEpisode, fetchMarks, mediaUrl, understand } from "../../episodes/client";
 import {
   engineTransition,
   initialEngineState,
+  type EnginePhase,
   type EngineEvent,
   type EngineState,
 } from "../../player/engine";
+import { markSessionStart, sessionExpired, sessionProgress } from "../../session/cap";
+import type { RoomConnection } from "../../session/room";
 import { recordEntry, startSession } from "../../session/transcript";
+import { createVolumeAudio, setVolume } from "../../session/volume";
 
 /** Placeholder video length until real segments land (content is M2+ media). */
 const VIDEO_PLACEHOLDER_MS = 4000;
+
+/** Engine phase → the §7 room phase vocabulary the mic device renders from. */
+const ROOM_PHASE: Record<EnginePhase, RoomPhase> = {
+  idle: "playing",
+  video: "playing",
+  asking: "asking",
+  listening: "listening",
+  thinking: "responding",
+  celebrating: "celebrating",
+  retrying: "asking",
+  together: "asking",
+  complete: "playing",
+};
 
 interface PlayerProps {
   episodeId: string;
   onExit: () => void;
   engine?: SpeechEngine;
+  /** Stage mode: publish state to and honor control from this room (§7). */
+  room?: RoomConnection;
+  /** 10-foot styling (TV stage). */
+  tv?: boolean;
 }
 
-export function Player({ episodeId, onExit, engine }: PlayerProps) {
+export function Player({ episodeId, onExit, engine, room, tv = false }: PlayerProps) {
   const { t, lang } = useI18n();
   const speech = useMemo(() => engine ?? createWebSpeech(), [engine]);
 
@@ -33,6 +55,7 @@ export function Player({ episodeId, onExit, engine }: PlayerProps) {
   const [heard, setHeard] = useState("");
   const [micBlocked, setMicBlocked] = useState(false);
   const [lastMatch, setLastMatch] = useState<string | null>(null);
+  const [dayT, setDayT] = useState(0); // SunMoon position (session cap §9.5)
 
   const rigRef = useRef<Rig | null>(null);
   const stateRef = useRef(state);
@@ -69,6 +92,20 @@ export function Player({ episodeId, onExit, engine }: PlayerProps) {
       const { next, effects } = engineTransition(stateRef.current, event, ep, langRef.current);
       stateRef.current = next;
       setState(next);
+
+      // Stage mode: the stage owns state.phase — publish every transition (§7).
+      // The hub preserves lastUtterance (the mic's write) on state merges.
+      room?.send({
+        type: "state",
+        state: {
+          mode: "player",
+          episodeId: ep.id,
+          segIdx: Math.max(0, next.segIdx),
+          phase: ROOM_PHASE[next.phase],
+          lastUtterance: { text: "", conf: 0, ts: 0 },
+          playAudio: { url: "", marks: "", nonce: 0 },
+        },
+      });
 
       const rig = rigRef.current;
       for (const effect of effects) {
@@ -155,7 +192,7 @@ export function Player({ episodeId, onExit, engine }: PlayerProps) {
         }
       }
     },
-    [speech],
+    [speech, room],
   );
 
   useEffect(() => {
@@ -182,6 +219,31 @@ export function Player({ episodeId, onExit, engine }: PlayerProps) {
       speech.stop();
     };
   }, [speech, dispatch]);
+
+  // Hard session cap (§9.5): the SunMoon arc is the only time signal a child
+  // sees; at the cap the engine ends warmly via SESSION_END. Ticks 1/s.
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setDayT(sessionProgress());
+      if (sessionExpired() && stateRef.current.phase !== "complete" && stateRef.current.phase !== "idle") {
+        dispatch({ type: "SESSION_END" });
+      }
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [dispatch]);
+
+  // Grown-up controls from the paired mic (§7: mic writes `control`).
+  const endedByControl = useRef(false);
+  useEffect(() => {
+    if (room === undefined) return;
+    return room.onRoom((snapshot) => {
+      if (snapshot.control.end && !endedByControl.current) {
+        endedByControl.current = true;
+        dispatch({ type: "SESSION_END" });
+      }
+      setVolume(snapshot.control.volume);
+    });
+  }, [room, dispatch]);
 
   if (loadError) {
     return (
@@ -210,10 +272,14 @@ export function Player({ episodeId, onExit, engine }: PlayerProps) {
             : null;
 
   return (
-    <main className="loop">
-      <button type="button" className="loop-back" onClick={onExit} aria-label={t("loop.back")}>
-        ←
-      </button>
+    <main className={`loop${tv ? " tv" : ""}`}>
+      {!tv && (
+        <button type="button" className="loop-back" onClick={onExit} aria-label={t("loop.back")}>
+          ←
+        </button>
+      )}
+
+      <SunMoon t={dayT} className="loop-sunmoon" />
 
       {phase === "video" && seg !== undefined && seg.type === "video" && (
         <section className="player-video" data-testid="video-placeholder">
@@ -223,7 +289,10 @@ export function Player({ episodeId, onExit, engine }: PlayerProps) {
       )}
 
       <div className="loop-stage">
-        <ChikuRig onReady={(rig) => (rigRef.current = rig)} />
+        <ChikuRig
+          onReady={(rig) => (rigRef.current = rig)}
+          rigOptions={{ createAudio: createVolumeAudio }}
+        />
       </div>
 
       {pill !== null && <div className={`loop-pill ${pill.cls}`}>{pill.text}</div>}
@@ -241,7 +310,15 @@ export function Player({ episodeId, onExit, engine }: PlayerProps) {
       )}
 
       {phase === "idle" && episode !== null && (
-        <button type="button" className="loop-start" onClick={() => dispatch({ type: "START" })}>
+        <button
+          type="button"
+          className="loop-start"
+          data-focusable="true"
+          onClick={() => {
+            markSessionStart();
+            dispatch({ type: "START" });
+          }}
+        >
           {speech.available ? t("mic.turnOnEars") : t("home.play")}
         </button>
       )}
