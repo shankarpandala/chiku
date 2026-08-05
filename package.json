@@ -13,7 +13,8 @@
     "dev:prototype": "corepack pnpm --filter @chiku/prototype dev",
     "ingest": "tsx scripts/ingest-design.ts",
     "typecheck": "corepack pnpm -r --filter=!@chiku/prototype run typecheck && tsc --noEmit -p scripts/tsconfig.json",
-    "test": "corepack pnpm -r --filter=!@chiku/prototype run test && vitest run"
+    "test": "corepack pnpm -r --filter=!@chiku/prototype run test && vitest run",
+    "dev:live": "corepack pnpm --filter @chiku/live dev"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

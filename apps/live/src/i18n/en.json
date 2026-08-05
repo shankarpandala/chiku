@@ -1,0 +1,47 @@
+{
+  "app.title": "Chiku",
+  "live.title": "Chiku Live",
+
+  "welcome.greeting": "Hi! I am Chiku. I want to see you!",
+  "welcome.begin": "Let's play!",
+
+  "camera.title": "Shall Chiku open his eyes?",
+  "camera.kidLine": "Then Chiku can watch you wave, smile and count on your fingers!",
+  "camera.allow": "Open Chiku's eyes",
+  "camera.promise": "Grown-ups: a camera is used only on this device, only while you play. Nothing is recorded, nothing leaves this device.",
+  "camera.skip": "Play without the camera",
+  "camera.loading": "Chiku is opening his eyes…",
+  "camera.blocked": "Chiku's eyes stayed closed — we can still play by tapping!",
+  "camera.offNote": "Chiku's eyes are off. Tap your answer — Chiku loves that too!",
+
+  "stage.seesYou": "Chiku sees you!",
+  "stage.lookingForYou": "Chiku is looking for you…",
+  "stage.videoLabel": "You, on this device only",
+
+  "act.fingers.prompt": "Show me {n} fingers!",
+  "act.fingers.retry": "So close! Hold your fingers up high for Chiku.",
+  "act.fingers.tap": "Or tap the number",
+  "act.wave.prompt": "Wave to Chiku!",
+  "act.wave.retry": "Big slow waves! Chiku is watching your hand.",
+  "act.wave.tap": "Or tap the waving hand",
+  "act.smile.prompt": "Show Chiku your biggest smile!",
+  "act.smile.retry": "An even bigger smile! Chiku will smile back.",
+  "act.smile.tap": "Or tap the happy face",
+
+  "choice.fingers": "{n} fingers",
+  "choice.wave.waving": "The waving hand",
+  "choice.wave.still": "The resting hand",
+  "choice.smile.happy": "The happy face",
+  "choice.smile.sad": "The sad face",
+
+  "praise.one": "Yes! You did it!",
+  "praise.two": "Wow! Look at you!",
+  "praise.three": "That's it! Well done!",
+  "praise.nudge": "Nearly! Let's try that one together.",
+
+  "streak.label": "Stars",
+
+  "goodbye.title": "Bye bye! Come back soon!",
+  "goodbye.wave": "Wave goodbye to Chiku!",
+  "goodbye.again": "Play again"
+}
