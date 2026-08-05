@@ -20,5 +20,14 @@
   "player.watch": "Watch!",
   "player.theEnd": "The end! Wave goodbye!",
   "player.offline": "Chiku is napping — try again soon!",
-  "home.apiDown": "Episodes are asleep (grown-ups: start the API)"
+  "home.apiDown": "Episodes are asleep (grown-ups: start the API)",
+  "stage.scanToPair": "Scan with a grown-up's phone",
+  "stage.pairHint": "The phone becomes Chiku's ears and remote. The TV never listens on its own.",
+  "stage.paired": "Phone connected!",
+  "stage.pickEpisode": "Pick a story!",
+  "mic.pairedWith": "Paired with the TV",
+  "mic.tapAnswer": "Or tap the answer",
+  "mic.waiting": "Waiting for the TV…",
+  "mic.ended": "All done! Go see the TV!",
+  "mic.release": "Let go when you finish"
 }

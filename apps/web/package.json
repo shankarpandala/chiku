@@ -14,16 +14,19 @@
     "@chiku/rig": "workspace:*",
     "@chiku/schema": "workspace:*",
     "@chiku/tokens": "workspace:*",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.14",
     "@types/react-dom": "^18.3.2",
     "@vitejs/plugin-react": "^4.3.4",
     "happy-dom": "^15.11.7",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
+    "vite-plugin-pwa": "^0.21.1",
     "vitest": "^2.1.8"
   }
 }

@@ -1,28 +1,30 @@
-import { useState } from "react";
 import { LangProvider } from "./i18n";
+import { navigate, useRoute } from "./router";
 import { Home } from "./surfaces/home/Home";
 import { LoopDemo } from "./surfaces/player/LoopDemo";
 import { Player } from "./surfaces/player/Player";
 import { ParentView } from "./surfaces/parent/ParentView";
-
-type Surface = { name: "home" } | { name: "player"; episodeId: string } | { name: "parent" } | { name: "loop" };
+import { Stage } from "./surfaces/stage/Stage";
+import { Mic } from "./surfaces/mic/Mic";
 
 export function App() {
-  const [surface, setSurface] = useState<Surface>({ name: "home" });
-  const home = (): void => setSurface({ name: "home" });
+  const route = useRoute();
+  const home = (): void => navigate({ name: "home" });
 
   return (
     <LangProvider>
-      {surface.name === "home" && (
+      {route.name === "home" && (
         <Home
-          onPlayEpisode={(episodeId) => setSurface({ name: "player", episodeId })}
-          onParent={() => setSurface({ name: "parent" })}
-          onLoopDemo={() => setSurface({ name: "loop" })}
+          onPlayEpisode={(episodeId) => navigate({ name: "player", episodeId })}
+          onParent={() => navigate({ name: "parent" })}
+          onLoopDemo={() => navigate({ name: "loop" })}
         />
       )}
-      {surface.name === "player" && <Player episodeId={surface.episodeId} onExit={home} />}
-      {surface.name === "parent" && <ParentView onBack={home} />}
-      {surface.name === "loop" && <LoopDemo onBack={home} />}
+      {route.name === "player" && <Player episodeId={route.episodeId} onExit={home} />}
+      {route.name === "stage" && <Stage onExit={home} />}
+      {route.name === "mic" && <Mic code={route.code} onExit={home} />}
+      {route.name === "parent" && <ParentView onBack={home} />}
+      {route.name === "loop" && <LoopDemo onBack={home} />}
     </LangProvider>
   );
 }

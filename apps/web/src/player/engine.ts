@@ -37,7 +37,9 @@ export type EngineEvent =
   | { type: "HEARD"; text: string; conf: number; tsMs: number }
   | { type: "LISTEN_TIMEOUT" }
   | { type: "UNDERSTOOD"; response: UnderstandResponse; utterance: string; heardAtMs: number }
-  | { type: "UNDERSTAND_FAILED" };
+  | { type: "UNDERSTAND_FAILED" }
+  /** Hard session cap (§9.5) or a grown-up End — warm goodbye, never a nag. */
+  | { type: "SESSION_END" };
 
 export type TranscriptOutcome =
   | "matched-local"
@@ -239,6 +241,13 @@ export function engineTransition(
       if (state.phase !== "thinking" || cp === null) break;
       // Brain unreachable: degrade to the local retry chain (§8 — never dead-air).
       return missPath(state, cp, lang, { checkpointId: cp.id, outcome: "retry" });
+
+    case "SESSION_END":
+      if (state.phase === "complete" || state.phase === "idle") break;
+      return {
+        next: { phase: "complete", segIdx: episode.segments.length, misses: 0, won: false },
+        effects: [{ type: "LISTEN_STOP" }, { type: "EPISODE_COMPLETE" }],
+      };
   }
 
   return same(state);

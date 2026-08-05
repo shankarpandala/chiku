@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createRig, type Rig, type RigState } from "@chiku/rig";
+import { createRig, type Rig, type RigOptions, type RigState } from "@chiku/rig";
 
 interface ChikuRigProps {
   /** Declarative state. Omit it to drive the rig imperatively via onReady. */
@@ -9,16 +9,20 @@ interface ChikuRigProps {
   className?: string;
   /** Hands the live Rig to the parent (speak(), imperative transitions). */
   onReady?: (rig: Rig) => void;
+  /** Extra RigOptions (audio factory etc.) — applied at creation only. */
+  rigOptions?: Partial<RigOptions>;
 }
 
 /** React binding for the framework-agnostic @chiku/rig runtime. */
-export function ChikuRig({ state = "idle", crop, showBody, className, onReady }: ChikuRigProps) {
+export function ChikuRig({ state = "idle", crop, showBody, className, onReady, rigOptions }: ChikuRigProps) {
   const host = useRef<HTMLDivElement>(null);
   const rig = useRef<Rig | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
   const onReadyRef = useRef(onReady);
   onReadyRef.current = onReady;
+  const rigOptionsRef = useRef(rigOptions);
+  rigOptionsRef.current = rigOptions;
 
   useEffect(() => {
     if (!host.current) return;
@@ -29,6 +33,7 @@ export function ChikuRig({ state = "idle", crop, showBody, className, onReady }:
       ...(crop !== undefined ? { crop } : {}),
       ...(showBody !== undefined ? { showBody } : {}),
       reducedMotion,
+      ...rigOptionsRef.current,
     });
     r.setState(stateRef.current);
     rig.current = r;

@@ -1,0 +1,303 @@
+/* Phone Mic & Remote (M3) — design ref: apps/prototype/src/screens/PhoneRemote.jsx.
+   Kid zone in the kid palette + Baloo; the grown-up strip deliberately switches
+   to Modernist chrome (var(--font-body), square corners) so a child skims past.
+   Teal appears ONLY on the held push-to-talk and the listening pill — the
+   reserved "Chiku is hearing you" meaning. */
+
+.mic {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 20px 150px; /* room for the docked grown-up strip */
+}
+
+.mic-center {
+  justify-content: center;
+  gap: 20px;
+  padding-bottom: 20px;
+}
+
+.mic-big {
+  margin: 0;
+  font-size: clamp(22px, 6vmin, 32px);
+  font-weight: 800;
+  color: var(--kid-chiku-dark);
+  text-align: center;
+}
+
+.mic-ghost {
+  font-family: var(--font-kid);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--kid-chiku-dark);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* Pairing status header */
+.mic-header {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--kid-chiku-dark);
+}
+
+.mic-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 6px;
+  background: #c9bfae; /* waiting: neutral, never colour alone (text says it too) */
+}
+
+.mic-dot.is-on {
+  background: #2f8f86;
+}
+
+/* Push-to-talk — one giant target, held rather than toggled */
+.mic-talk {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.mic-ptt {
+  position: relative;
+  width: min(70vmin, 340px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: none;
+  background: var(--kid-cream);
+  box-shadow:
+    0 6px 0 #e7dcc8,
+    inset 0 0 0 6px #efe4d0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  font-family: var(--font-kid);
+  color: var(--kid-chiku-dark);
+  touch-action: none; /* a hold must never scroll the page */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mic-ptt.is-holding {
+  background: var(--kid-teal);
+  color: var(--kid-cream);
+  box-shadow:
+    0 6px 0 #25736c,
+    inset 0 0 0 6px #25736c;
+}
+
+.mic-ptt:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.mic-ptt-ring {
+  display: none;
+}
+
+.mic-ptt.is-holding .mic-ptt-ring {
+  display: block;
+  position: absolute;
+  inset: -18px;
+  border-radius: 50%;
+  border: 6px solid var(--kid-teal);
+  animation: micPulse 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.mic-glyph {
+  width: 38%;
+  height: auto;
+}
+
+.mic-ptt-label {
+  font-size: clamp(18px, 5.4vmin, 24px);
+  font-weight: 800;
+  padding: 0 14%;
+  text-align: center;
+}
+
+/* Live level bars — flat when idle, dancing teal while held */
+.mic-bars {
+  height: 34px;
+  display: flex;
+  align-items: flex-end;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.mic-bar {
+  width: 11px;
+  height: 100%;
+  border-radius: 6px;
+  background: #e7dcc8;
+  transform: scaleY(0.3);
+  transform-origin: bottom;
+}
+
+.mic-talk.is-holding .mic-bar {
+  background: var(--kid-teal);
+  transform: none;
+  animation: micBarUp 0.85s ease-in-out infinite;
+}
+
+.mic-off {
+  margin: 12px 0 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--kid-chiku-dark);
+  text-align: center;
+}
+
+/* Tap-answer chips — the no-speech answer path, listening phase only */
+.mic-chips {
+  width: 100%;
+  max-width: 440px;
+}
+
+.mic-chips-label {
+  margin: 0 0 10px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #a293c4;
+}
+
+.mic-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 12px;
+}
+
+.mic-chip {
+  font-family: var(--font-kid);
+  border: 2px solid #e7dcc8;
+  background: #fff;
+  border-radius: 22px;
+  padding: 10px;
+  min-height: 108px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.mic-chip-swatch {
+  width: 100%;
+  height: 64px;
+  border-radius: 18px;
+}
+
+.mic-chip-count {
+  background: var(--kid-sand);
+  color: var(--kid-ink);
+  font-size: 20px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+
+.mic-chip-label {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--kid-ink);
+}
+
+/* Grown-up strip — Modernist chrome, docked bottom, square corners */
+.mic-grownup {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-top: 2px solid var(--color-divider);
+  background: var(--color-surface);
+  padding: 12px 20px 18px;
+  font-family: var(--font-body);
+  color: var(--color-text);
+}
+
+.mic-grownup-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+
+.mic-grownup-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.mic-end {
+  font-family: var(--font-body);
+  font-size: 14px;
+  padding: 10px 18px;
+  border: 1px solid var(--color-divider);
+  border-radius: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.mic-end.is-confirm {
+  background: var(--color-text);
+  color: var(--color-bg);
+}
+
+.mic-volume {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.mic-volume input {
+  flex: 1;
+  accent-color: var(--color-text);
+}
+
+.mic-room {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--color-neutral-600);
+}
+
+@keyframes micPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.35;
+  }
+}
+
+@keyframes micBarUp {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}

@@ -1,0 +1,155 @@
+/* TV Stage — 10-foot chrome (M3). From the TvStage design frame: dark stage
+   ground (#231f2e), type floor 24px, anything actionable 44px+ with generous
+   focus targets. The D-pad focus ring itself (6px marigold + 1.04x scale) is
+   global — [data-focusable]:focus-visible in styles.css. */
+
+.stage {
+  min-height: 100%;
+  background: #231f2e; /* stage ground from the design frame */
+  position: relative;
+}
+
+/* ---- Episode picker (the stage "home") ---------------------------------- */
+
+.stage-home {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  /* Bottom padding keeps the last grid row clear of the pairing card. */
+  padding: 56px 64px 240px;
+}
+
+.stage-title {
+  margin: 0;
+  display: flex;
+  gap: 20px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: clamp(32px, 4vw, 56px);
+  font-weight: 800;
+  color: var(--kid-cream);
+}
+
+.stage-title-sub {
+  font-size: 0.6em;
+  font-weight: 700;
+  color: #cdc3e4;
+}
+
+.stage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 36px;
+  align-content: start;
+}
+
+/* Cards inherit .home-episode-card; lift every floor for the 10-foot view. */
+.stage-episode-card {
+  font-size: clamp(24px, 2.2vw, 32px);
+  min-height: 180px;
+  padding: 28px 32px;
+  justify-content: center;
+  gap: 10px;
+}
+
+.stage-episode-card .home-episode-play {
+  width: 56px;
+  height: 56px;
+  font-size: 24px;
+}
+
+/* The Player keeps its warm solo look while the stage ground stays dark. */
+.stage .loop.tv {
+  background: var(--kid-cream);
+  min-height: 100vh;
+}
+
+/* ---- Offline fallback (never a dead screen) ----------------------------- */
+
+.stage-offline {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 48px;
+}
+
+.stage-offline-note {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 40px);
+  font-weight: 700;
+  color: var(--kid-cream);
+  text-align: center;
+}
+
+/* ---- Pairing card — bottom-left, all session ("pairing, not casting") --- */
+
+.stage-pairing {
+  position: fixed;
+  bottom: 32px;
+  left: 32px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: var(--kid-cream);
+  color: var(--kid-ink);
+  border: 4px solid var(--kid-ink);
+  padding: 20px 26px;
+  max-width: min(620px, calc(100vw - 64px));
+}
+
+/* Smaller in a corner while an episode plays — still present, still scannable. */
+.stage-pairing.is-mini {
+  transform: scale(0.62);
+  transform-origin: bottom left;
+}
+
+.stage-code {
+  font-size: clamp(48px, 5vw, 72px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  color: var(--kid-ink);
+}
+
+.stage-qr {
+  width: 132px;
+  height: 132px;
+  flex: 0 0 auto;
+  image-rendering: pixelated; /* crisp modules at TV scale */
+}
+
+.stage-pairing-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 260px;
+}
+
+.stage-pairing-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+/* Grown-up microcopy — small on purpose, per the design frame's pairing card. */
+.stage-pairing-hint {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--kid-chiku-dark);
+}
+
+/* Mic-presence pill — marigold on purpose: teal is reserved for
+   "Chiku is hearing you" (§9 / design rule). */
+.stage-paired {
+  position: absolute;
+  top: -20px;
+  right: -14px;
+}

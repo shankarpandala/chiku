@@ -205,6 +205,23 @@ describe("episode engine", () => {
     expect((all[7] ?? []).some((e) => e.type === "ESCALATE")).toBe(false);
   });
 
+  it("SESSION_END from any active phase completes warmly (§9.5 hard cap)", () => {
+    const midListening = run([
+      { type: "START" },
+      { type: "VIDEO_DONE" },
+      { type: "SPEAK_ENDED" },
+      { type: "SESSION_END" },
+    ]);
+    expect(midListening.state.phase).toBe("complete");
+    expect(kinds(midListening.all[3] ?? [])).toEqual(["LISTEN_STOP", "EPISODE_COMPLETE"]);
+
+    const midVideo = run([{ type: "START" }, { type: "SESSION_END" }]);
+    expect(midVideo.state.phase).toBe("complete");
+
+    // Idle and complete are no-ops — no goodbye before hello, no double end.
+    expect(engineTransition(initialEngineState, { type: "SESSION_END" }, EP, "en").next.phase).toBe("idle");
+  });
+
   it("onMiss lines resolve per language via the <base>_<lang> convention", () => {
     const { all } = run(
       [{ type: "START" }, { type: "VIDEO_DONE" }, { type: "SPEAK_ENDED" }, { type: "LISTEN_TIMEOUT" }],
