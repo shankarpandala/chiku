@@ -1,0 +1,10 @@
+{
+  "name": "Chiku",
+  "short_name": "Chiku",
+  "description": "The show that hears you",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf6ec",
+  "theme_color": "#fdf6ec",
+  "icons": []
+}

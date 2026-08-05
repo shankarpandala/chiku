@@ -1,0 +1,55 @@
+{
+  "id": "ep001",
+  "title": {
+    "te": "రంగుల అడవి",
+    "en": "The Forest of Colours"
+  },
+  "langs": [
+    "te",
+    "en"
+  ],
+  "segments": [
+    {
+      "type": "video",
+      "src": "seg1.mp4"
+    },
+    {
+      "type": "checkpoint",
+      "id": "cp1",
+      "ask": {
+        "audio": {
+          "te": "cp1_ask_te.mp3",
+          "en": "cp1_ask_en.mp3"
+        },
+        "marks": {
+          "te": "cp1_ask_te.marks.json",
+          "en": "cp1_ask_en.marks.json"
+        }
+      },
+      "listenMs": 6000,
+      "expect": [
+        {
+          "id": "green",
+          "match": [
+            "green",
+            "paccha",
+            "pachcha",
+            "hara"
+          ],
+          "praise": {
+            "audio": {
+              "te": "praise2_te.mp3",
+              "en": "praise2_en.mp3"
+            }
+          }
+        }
+      ],
+      "onMiss": {
+        "retryAudio": "cp1_retry",
+        "maxRetries": 1,
+        "fallbackAudio": "lets_say_together"
+      },
+      "escalate": true
+    }
+  ]
+}

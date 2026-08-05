@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from packageManager in package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm ingest
+      - run: git diff --exit-code packages/tokens/generated # generated tokens must be committed fresh
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: No secrets in web env
+        run: |
+          ! grep -rInE "VITE_[A-Z_]*(KEY|TOKEN|SECRET|PASSWORD)" apps/web services/api/.env.example 2>/dev/null
