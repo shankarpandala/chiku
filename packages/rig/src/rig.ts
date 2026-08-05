@@ -2,8 +2,9 @@
 // cycle, speak marks) so they can be suppressed, faked in tests, and cleared
 // on dispose. Rendering itself is delegated to render.ts.
 
+import { defaultCreateAmplitude, defaultCreateAudio } from "./audio";
 import { buildStyle, renderInto, RIG_CLASS } from "./render";
-import type { Emote, Rig, RigOptions, RigState, Viseme, VisemeMark } from "./types";
+import type { AmplitudeSource, Emote, Rig, RigAudio, RigOptions, RigState, Viseme, VisemeMark } from "./types";
 
 /**
  * Injectable timer/clock shim (defaults to the globals, read at call time so
@@ -37,8 +38,31 @@ const BLINK_MIN_MS = 3000;
 const BLINK_MAX_MS = 6000;
 const BLINK_CLOSED_MS = 150;
 
-/** speak() without marks resolves after this long (M0 placeholder; audio lands in M1). */
+/** speak() with no audio and no marks resolves after this long (degraded hosts). */
 const SPEAK_DEFAULT_MS = 2000;
+
+/** Audio-clock poll for mark scheduling (§6: marks ride audio.currentTime). */
+const MARK_POLL_MS = 50;
+
+/** Amplitude-fallback poll. */
+const AMP_POLL_MS = 60;
+
+/**
+ * RMS loudness → mouth openness, quantized to the design's discrete visemes
+ * (the §6 "jaw-open interpolation" against a fixed mouth set). Descending.
+ */
+const AMP_LEVELS: readonly [number, Viseme][] = [
+  [0.16, "O"],
+  [0.09, "A"],
+  [0.03, "E"],
+];
+
+function visemeForLevel(rms: number): Viseme {
+  for (const [threshold, v] of AMP_LEVELS) {
+    if (rms >= threshold) return v;
+  }
+  return "closed";
+}
 
 export function createRig(host: HTMLElement, opts: RigOptions = {}, clock: Partial<RigClock> = {}): Rig {
   const clk: RigClock = {
@@ -75,6 +99,10 @@ export function createRig(host: HTMLElement, opts: RigOptions = {}, clock: Parti
   let blinkTimer: unknown = null; // pending blink-close OR blink-open timeout
   let visemeTimer: unknown = null; // the 200ms speaking interval
   let speakTimers: unknown[] = []; // mark timeouts + completion timeout
+  let speakPoll: unknown = null; // audio-clock / amplitude interval
+  let speakAudio: RigAudio | null = null;
+  let speakAmp: AmplitudeSource | null = null;
+  let speakDetach: (() => void) | null = null;
   let speakResolve: (() => void) | null = null;
 
   function render(): void {
@@ -144,6 +172,22 @@ export function createRig(host: HTMLElement, opts: RigOptions = {}, clock: Parti
   function cancelSpeak(): void {
     for (const t of speakTimers) clk.clearTimeout(t);
     speakTimers = [];
+    if (speakPoll !== null) {
+      clk.clearInterval(speakPoll);
+      speakPoll = null;
+    }
+    if (speakDetach !== null) {
+      speakDetach();
+      speakDetach = null;
+    }
+    if (speakAmp !== null) {
+      speakAmp.dispose();
+      speakAmp = null;
+    }
+    if (speakAudio !== null) {
+      speakAudio.pause();
+      speakAudio = null;
+    }
     if (speakResolve !== null) {
       const resolve = speakResolve;
       speakResolve = null;
@@ -161,9 +205,11 @@ export function createRig(host: HTMLElement, opts: RigOptions = {}, clock: Parti
     return state;
   }
 
-  // --- speak(): M0 placeholder — no audio playback (M1), but real scheduling --
+  // --- speak(): audio playback with the §6 degradation chain ----------------
+  //   marks on the audio clock  >  amplitude sampler  >  200ms viseme cycle
+  //   audio missing/failed      >  timer-scheduled marks (never dead-air)
 
-  function speak(_audioUrl: string, marks?: VisemeMark[]): Promise<void> {
+  function speak(audioUrl: string, marks?: VisemeMark[]): Promise<void> {
     if (disposed) return Promise.resolve();
     cancelSpeak();
 
@@ -176,35 +222,120 @@ export function createRig(host: HTMLElement, opts: RigOptions = {}, clock: Parti
     }
 
     const hasMarks = marks !== undefined && marks.length > 0;
-    enterState("speaking", !hasMarks); // marks drive the mouth; otherwise the placeholder cycle does
+    const sorted = hasMarks && marks !== undefined ? [...marks].sort((a, b) => a.t - b.t) : [];
+
+    // Praise plays over the celebrate pose: keep the happy emote, let the
+    // marks drive the mouth (character sheet: celebrate ≈1.2s, talking face
+    // otherwise). Any other state hands over to "speaking".
+    const underCelebrate = state === "celebrate";
+    if (underCelebrate) {
+      stopCycle();
+      viseme = null;
+      render();
+    } else {
+      enterState("speaking", false);
+    }
 
     return new Promise<void>((resolve) => {
       speakResolve = resolve;
+
       const finish = (): void => {
         const r = speakResolve;
         speakResolve = null;
-        for (const t of speakTimers) clk.clearTimeout(t);
-        speakTimers = [];
+        cancelSpeak();
         enterState("idle", true);
         if (r !== null) r();
       };
 
-      if (hasMarks && marks !== undefined) {
-        let end = 0;
-        for (const m of marks) {
-          const at = Math.max(0, m.t);
-          if (at > end) end = at;
-          speakTimers.push(
-            clk.setTimeout(() => {
-              viseme = m.viseme;
-              render();
-            }, at),
-          );
+      const scheduleTimerFallback = (): void => {
+        if (hasMarks) {
+          let end = 0;
+          for (const m of sorted) {
+            const at = Math.max(0, m.t);
+            if (at > end) end = at;
+            speakTimers.push(
+              clk.setTimeout(() => {
+                viseme = m.viseme;
+                render();
+              }, at),
+            );
+          }
+          // Scheduled after the marks so an at-`end` mark applies before we finish.
+          speakTimers.push(clk.setTimeout(finish, end));
+        } else {
+          if (!underCelebrate) startCycle();
+          speakTimers.push(clk.setTimeout(finish, SPEAK_DEFAULT_MS));
         }
-        // Scheduled after the marks so an at-`end` mark applies before we finish.
-        speakTimers.push(clk.setTimeout(finish, end));
+      };
+
+      const audio = (opts.createAudio ?? defaultCreateAudio)(audioUrl);
+      if (audio === null) {
+        scheduleTimerFallback();
+        return;
+      }
+
+      speakAudio = audio;
+      const onEnded = (): void => {
+        finish();
+      };
+      const onError = (): void => {
+        // Audio died mid-flight: drop to the timer chain rather than dead-air.
+        if (speakDetach !== null) {
+          speakDetach();
+          speakDetach = null;
+        }
+        if (speakPoll !== null) {
+          clk.clearInterval(speakPoll);
+          speakPoll = null;
+        }
+        speakAudio = null;
+        scheduleTimerFallback();
+      };
+      audio.addEventListener("ended", onEnded);
+      audio.addEventListener("error", onError);
+      speakDetach = () => {
+        audio.removeEventListener("ended", onEnded);
+        audio.removeEventListener("error", onError);
+      };
+
+      if (hasMarks) {
+        // Mouth rides the audio clock, so drift/buffering can't desync it.
+        let idx = 0;
+        speakPoll = clk.setInterval(() => {
+          const tMs = audio.currentTime * 1000;
+          let next: Viseme | null = null;
+          while (idx < sorted.length) {
+            const mark = sorted[idx];
+            if (mark === undefined || mark.t > tMs) break;
+            next = mark.viseme;
+            idx += 1;
+          }
+          if (next !== null) {
+            viseme = next;
+            render();
+          }
+        }, MARK_POLL_MS);
       } else {
-        speakTimers.push(clk.setTimeout(finish, SPEAK_DEFAULT_MS));
+        speakAmp = (opts.createAmplitude ?? defaultCreateAmplitude)(audio);
+        if (speakAmp !== null) {
+          speakPoll = clk.setInterval(() => {
+            if (speakAmp === null) return;
+            const v = visemeForLevel(speakAmp.sample());
+            if (v !== viseme) {
+              viseme = v;
+              render();
+            }
+          }, AMP_POLL_MS);
+        } else if (!underCelebrate) {
+          startCycle();
+        }
+      }
+
+      const played = audio.play();
+      if (played !== undefined && typeof (played as Promise<void>).then === "function") {
+        void (played as Promise<void>).catch(() => {
+          onError();
+        });
       }
     });
   }

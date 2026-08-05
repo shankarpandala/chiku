@@ -91,7 +91,7 @@ describe("speaking", () => {
   });
 
   it("speak() with marks applies each viseme at its time and resolves, then returns to idle", async () => {
-    rig = createRig(host);
+    rig = createRig(host, { createAudio: () => null }); // timer-fallback chain
     const marks: VisemeMark[] = [
       { t: 0, viseme: "O" },
       { t: 300, viseme: "A" },
@@ -124,7 +124,7 @@ describe("speaking", () => {
   });
 
   it("speak() without marks runs the placeholder cycle and resolves after 2s", async () => {
-    rig = createRig(host);
+    rig = createRig(host, { createAudio: () => null }); // timer-fallback chain
     let resolved = false;
     const p = rig.speak("hello.mp3").then(() => {
       resolved = true;
@@ -143,7 +143,7 @@ describe("speaking", () => {
   });
 
   it("an external setState interrupts an in-flight speak and resolves it", async () => {
-    rig = createRig(host);
+    rig = createRig(host, { createAudio: () => null });
     let resolved = false;
     const p = rig.speak("long.mp3").then(() => {
       resolved = true;
@@ -230,7 +230,7 @@ describe("dispose", () => {
   });
 
   it("during an in-flight speak resolves the pending promise and leaks nothing", async () => {
-    rig = createRig(host);
+    rig = createRig(host, { createAudio: () => null });
     let resolved = false;
     const p = rig.speak("a.mp3", [{ t: 0, viseme: "O" }, { t: 5000, viseme: "closed" }]).then(() => {
       resolved = true;

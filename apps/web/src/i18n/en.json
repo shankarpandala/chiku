@@ -2,10 +2,18 @@
   "app.title": "Chiku",
   "home.greeting": "Say hello to Chiku!",
   "home.callReady": "Today's call is ready",
+  "home.play": "Play with Chiku",
+  "loop.question": "What colour is this?",
+  "loop.hint": "Say it out loud!",
+  "loop.chikuTalking": "Chiku is talking",
+  "loop.done": "Well done!",
+  "loop.again": "Play again",
+  "loop.back": "Back",
   "mic.wantsToHear": "Chiku wants to hear you!",
   "mic.turnOnEars": "Turn on the ears",
   "mic.promise": "A grown-up taps this once. Nothing is recorded or stored.",
   "remote.holdToTalk": "Hold to talk",
   "remote.chikuHears": "Chiku hears you",
-  "call.waveGoodbye": "Wave goodbye"
+  "call.waveGoodbye": "Wave goodbye",
+  "loop.micOff": "Chiku's ears are off — a grown-up can help"
 }

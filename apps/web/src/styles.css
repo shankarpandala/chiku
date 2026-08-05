@@ -56,6 +56,165 @@ body {
   font-weight: 600;
 }
 
+/* Home CTA — the one marigold primary action (design: one per screen). */
+.home-play {
+  font-family: var(--font-kid);
+  font-size: clamp(18px, 3.2vmin, 26px);
+  font-weight: 700;
+  color: #5d4a20;
+  background: var(--kid-marigold);
+  border: none;
+  border-radius: 28px;
+  padding: 18px 36px;
+  min-height: 64px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #d1832a;
+}
+
+.home-play:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #d1832a;
+}
+
+/* The checkpoint loop demo (M1) */
+.loop {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  position: relative;
+}
+
+.loop-back {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  background: var(--kid-sand);
+  color: var(--kid-ink);
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.loop-stage {
+  width: min(52vmin, 320px);
+  aspect-ratio: 240 / 248;
+}
+
+.loop-pill {
+  font-weight: 700;
+  font-size: clamp(16px, 2.6vmin, 20px);
+  padding: 8px 20px;
+  border-radius: 999px;
+  color: var(--kid-cream);
+}
+
+.pill-teal {
+  background: var(--kid-teal);
+}
+
+.pill-violet {
+  background: var(--kid-chiku-dark);
+}
+
+.pill-marigold {
+  background: var(--kid-marigold);
+  color: #5d4a20;
+}
+
+.loop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: var(--kid-sand);
+  border-radius: 28px;
+  padding: 20px 32px;
+  min-width: min(80vw, 380px);
+}
+
+.loop-swatch {
+  width: 96px;
+  height: 96px;
+  border-radius: 24px;
+  background: var(--kid-leaf);
+}
+
+.loop-question {
+  margin: 0;
+  font-size: clamp(18px, 3.4vmin, 26px);
+  font-weight: 700;
+}
+
+.loop-hint {
+  margin: 0;
+  font-size: 17px;
+  color: var(--kid-teal);
+  font-weight: 600;
+}
+
+.loop-earned {
+  margin: 0;
+  font-size: clamp(18px, 3.4vmin, 26px);
+  font-weight: 800;
+  color: var(--kid-chiku-dark);
+}
+
+.loop-start {
+  font-family: var(--font-kid);
+  font-size: clamp(17px, 3vmin, 24px);
+  font-weight: 700;
+  color: #5d4a20;
+  background: var(--kid-marigold);
+  border: none;
+  border-radius: 28px;
+  padding: 16px 32px;
+  min-height: 64px;
+  cursor: pointer;
+  box-shadow: 0 5px 0 #d1832a;
+}
+
+/* Dev-only "type the answer" strip */
+.dev-say {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+
+.dev-say input {
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  width: 200px;
+}
+
+.dev-say button {
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.dev-say-meta {
+  color: var(--color-neutral-600);
+}
+
 /* Dev-only rig state switcher — grown-up chrome, deliberately not kid-styled. */
 .dev-states {
   position: fixed;
