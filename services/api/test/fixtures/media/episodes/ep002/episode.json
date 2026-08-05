@@ -1,0 +1,6 @@
+{
+  "id": "ep002",
+  "title": { "te": "నీటి పాట", "en": "The Water Song" },
+  "langs": ["te", "en"],
+  "segments": [{ "type": "video", "src": "seg1.mp4" }]
+}

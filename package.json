@@ -8,12 +8,12 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "pnpm --filter @chiku/web dev",
-    "dev:api": "pnpm --filter @chiku/api dev",
-    "dev:prototype": "pnpm --filter @chiku/prototype dev",
+    "dev": "corepack pnpm --filter @chiku/web dev",
+    "dev:api": "corepack pnpm --filter @chiku/api dev",
+    "dev:prototype": "corepack pnpm --filter @chiku/prototype dev",
     "ingest": "tsx scripts/ingest-design.ts",
-    "typecheck": "pnpm -r --filter=!@chiku/prototype run typecheck && tsc --noEmit -p scripts/tsconfig.json",
-    "test": "pnpm -r --filter=!@chiku/prototype run test && vitest run"
+    "typecheck": "corepack pnpm -r --filter=!@chiku/prototype run typecheck && tsc --noEmit -p scripts/tsconfig.json",
+    "test": "corepack pnpm -r --filter=!@chiku/prototype run test && vitest run"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
