@@ -48,6 +48,8 @@ import { randInt } from "../../activities/types";
 import { createVisionEngine } from "../../vision/engine";
 import type { VisionEngine, VisionFrame, VisionStatus } from "../../vision/types";
 import { createListener, createSpeaker, isMicUnusable } from "../../voice";
+import { getCloudEars, setCloudEars } from "../../settings/cloudEars";
+import { HoldButton } from "../../components/HoldButton";
 import type { HeardResult, Listener, SpeakHandle, Speaker } from "../../voice/types";
 
 export type Phase = "welcome" | "camera-ask" | "playing" | "goodbye";
@@ -71,7 +73,7 @@ export interface LiveProps {
 }
 
 export function Live({ rigFactory, random = Math.random }: LiveProps) {
-  const { lang, tIn } = useI18n();
+  const { lang, other, tIn } = useI18n();
   const reducedMotion = useReducedMotion();
 
   const stageRef = useRef<CameraStageHandle | null>(null);
@@ -101,6 +103,14 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const [nudgedId, setNudgedId] = useState<string | null>(null);
   const [streak, setStreak] = useState(0);
   const [micMode, setMicMode] = useState<MicMode>("unknown");
+  /**
+   * The parent's cloud-ears choice (see settings/cloudEars.ts). On-device
+   * recognition stays the preferred path; this only matters on platforms —
+   * like this one — where the browser has no local speech at all.
+   */
+  const [cloudEars, setCloudEarsState] = useState<boolean>(() => getCloudEars());
+  /** Outcome of the ensureOnDevice probe: may the mic open at all? */
+  const micAllowedRef = useRef<boolean | null>(null);
   /** The mic is genuinely open right now — the only thing that turns it teal. */
   const [listening, setListening] = useState(false);
   /**
@@ -372,20 +382,25 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     const listener = listenerRef.current;
     if (!listener?.available) return;
     let alive = true;
-    void listener.ensureOnDevice(langRef.current).then((local) => {
+    void listener.ensureOnDevice(langRef.current).then((allowed) => {
       if (!alive) return;
-      if (!local) setMicMode("off");
+      micAllowedRef.current = allowed;
+      // ensureOnDevice answers true when recognition is local, OR when a
+      // grown-up deliberately accepted cloud ears (the listener was built with
+      // that flag). False means neither — the mic stays shut and says so.
+      if (!allowed) setMicMode("off");
+      else setMicMode("ready");
     });
     return () => {
       alive = false;
     };
-  }, [phase]);
+  }, [phase, cloudEars]);
 
   const openMic = useCallback((): void => {
     const listener = listenerRef.current;
     if (!listener?.available) return;
-    // Never open a mic we could not confirm is local (see the effect above).
-    if (listener.onDevice === false) {
+    // Never open a mic the probe did not clear (local, or parent-accepted cloud).
+    if (micAllowedRef.current === false) {
       setMicMode("off");
       return;
     }
@@ -469,11 +484,15 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
    * and never sits at "unknown" past the first commit, which is what keeps the
    * honest line from flashing on a device that does have ears.
    */
+  // Re-runs when the parent flips cloud ears: the listener is rebuilt with the
+  // new permission model. The greeting below is guarded so it plays once.
+  const greetedRef = useRef(false);
   useEffect(() => {
     const speaker = createSpeaker();
-    const listener = createListener();
+    const listener = createListener({ allowCloudRecognition: cloudEars });
     speakerRef.current = speaker;
     listenerRef.current = listener;
+    micAllowedRef.current = null; // unknown again until the probe answers
     setMicMode(listener.available ? "ready" : "off");
 
     const offResult = listener.onResult((result) => {
@@ -496,7 +515,11 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
 
     // Chiku says hello the moment he is on screen, so the very first thing a
     // child who cannot read gets is a voice rather than a wall of letters.
-    sayRef.current("welcome.greeting", undefined, "encouraging", "idle");
+    // Once only — a parent flipping cloud ears must not restart the hello.
+    if (!greetedRef.current) {
+      greetedRef.current = true;
+      sayRef.current("welcome.greeting", undefined, "encouraging", "idle");
+    }
 
     return () => {
       offResult();
@@ -511,7 +534,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       speakerRef.current = null;
       speakHandleRef.current = null;
     };
-  }, []);
+  }, [cloudEars]);
 
   // --- entry points --------------------------------------------------------
 
@@ -649,6 +672,26 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
             <p className="live-promise">
               <Bilingual k="camera.promise" />
             </p>
+
+            {/* Cloud ears — a grown-up decision, so it hides behind a hold.
+                Shown only when the platform has no local speech (micMode "off"
+                after the probe) or when it is already on and can be revoked.
+                The words are the point: honest about where the audio goes. */}
+            {(micMode === "off" || cloudEars) && (
+              <div className="cloud-ears">
+                <p className="live-promise">
+                  <Bilingual k={cloudEars ? "cloud.explainOn" : "cloud.explainOff"} />
+                </p>
+                <HoldButton
+                  label={`${tIn(lang, cloudEars ? "cloud.holdOff" : "cloud.holdOn")} · ${tIn(other, cloudEars ? "cloud.holdOff" : "cloud.holdOn")}`}
+                  onHeld={() => {
+                    const next = !cloudEars;
+                    setCloudEars(next);
+                    setCloudEarsState(next);
+                  }}
+                />
+              </div>
+            )}
           </>
         )}
 
@@ -678,7 +721,17 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
                     that Chiku ignores them, which is the exact opposite of the
                     thing this surface is for. */}
                 {micMode === "ready" && (
-                  <TalkButton listening={listening} onPress={openMic} onRelease={closeMic} />
+                  <>
+                    <TalkButton listening={listening} onPress={openMic} onRelease={closeMic} />
+                    {/* Honesty tag: these ears are only possible via the
+                        internet on this platform, and the UI says so wherever
+                        they appear — not just on the consent screen. */}
+                    {cloudEars && (
+                      <p className="live-note cloud-note">
+                        <Bilingual k="cloud.note" inline />
+                      </p>
+                    )}
+                  </>
                 )}
                 {micMode === "off" && (
                   <p className="live-note">
