@@ -22,6 +22,13 @@
  * something the show may decide on its own.
  *
  * Nothing in this module reaches the network itself.
+ *
+ * THE MIC DOES NOT SURVIVE THE PAGE BEING HIDDEN. The surface opens the mic
+ * while a hand is on the talk button and closes it on release — but a tab that
+ * is switched away mid-hold may never deliver that release, and an open
+ * microphone in a bedroom with nobody looking at the screen is exactly what
+ * this product promises not to be. So the listener watches `visibilitychange`
+ * itself and aborts, rather than trusting a pointer event that may not come.
  */
 
 import type { HeardResult, Listener, VoiceLang } from "./types";
@@ -138,6 +145,13 @@ export function isMicUnusable(message: string): boolean {
   return MIC_UNUSABLE_ERRORS.has(code);
 }
 
+/** `document`, narrowed to the one fact and the one event we need. */
+export interface PageLifecycle {
+  readonly hidden: boolean;
+  addEventListener(type: "visibilitychange", cb: () => void): void;
+  removeEventListener(type: "visibilitychange", cb: () => void): void;
+}
+
 export interface ListenerOptions {
   /**
    * Injected recogniser constructor. Defaults to the platform's
@@ -145,6 +159,11 @@ export interface ListenerOptions {
    * happy-dom has neither.
    */
   readonly recognition?: RecognitionFactory | null;
+  /**
+   * Visibility source. Defaults to `document`; `null` (or no DOM) disables the
+   * hidden-page guard.
+   */
+  readonly lifecycle?: PageLifecycle | null;
   /**
    * Queries whether the engine can recognise `lang` WITHOUT sending audio away.
    * Defaults to Chrome 139+'s `SpeechRecognition.available({processLocally})`.
@@ -228,11 +247,57 @@ class OnDeviceListener implements Listener {
   /** null = not yet probed. Reported to the surface so the copy can be true. */
   #onDevice: boolean | null = null;
 
+  readonly #lifecycle: PageLifecycle | null;
+  #offVisibility: (() => void) | null = null;
+
   constructor(opts: ListenerOptions = {}) {
     this.#factory = opts.recognition === undefined ? browserRecognitionFactory() : opts.recognition;
     this.#checkOnDevice =
       opts.checkOnDevice === undefined ? browserOnDeviceCheck() : opts.checkOnDevice;
     this.#allowCloud = opts.allowCloudRecognition ?? false;
+    this.#lifecycle = opts.lifecycle === undefined ? browserLifecycle() : opts.lifecycle;
+    this.#watchVisibility();
+  }
+
+  #watchVisibility(): void {
+    const host = this.#lifecycle;
+    if (!host || typeof host.addEventListener !== "function") return;
+    const onChange = (): void => {
+      if (host.hidden) this.#closeForHiddenPage();
+    };
+    try {
+      host.addEventListener("visibilitychange", onChange);
+    } catch {
+      return;
+    }
+    this.#offVisibility = () => {
+      try {
+        host.removeEventListener("visibilitychange", onChange);
+      } catch {
+        // Nothing left to unsubscribe from.
+      }
+    };
+  }
+
+  /**
+   * abort(), not stop(): a transcript delivered to a page nobody is looking at
+   * would answer a checkpoint the child has walked away from. Close the mic and
+   * report the turn as ended, which is what the surface already handles.
+   */
+  #closeForHiddenPage(): void {
+    const rec = this.#rec;
+    if (!rec) return;
+    const handler = rec.onend;
+    detach(rec);
+    this.#rec = null;
+    this.#stopping = false;
+    try {
+      rec.abort();
+    } catch {
+      // Already closed; the listeners below still have to be told.
+    }
+    if (handler) handler();
+    else this.#emitEnd();
   }
 
   /** What we actually got: true = local, false = would be cloud, null = unprobed. */
@@ -382,6 +447,8 @@ class OnDeviceListener implements Listener {
   dispose(): void {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.#offVisibility?.();
+    this.#offVisibility = null;
     const rec = this.#rec;
     this.#rec = null;
     this.#stopping = false;
@@ -477,6 +544,13 @@ interface RecognitionConstructor {
  * Standard name first, `webkit`-prefixed second — Safari and older Chrome only
  * expose the prefixed one, and it is the same object.
  */
+/** `document`, or null outside a DOM (tests, workers). */
+export function browserLifecycle(): PageLifecycle | null {
+  const doc = (globalThis as { document?: Document }).document;
+  if (!doc || typeof doc.addEventListener !== "function") return null;
+  return doc;
+}
+
 export function browserRecognitionFactory(): RecognitionFactory | null {
   const scope = globalThis as {
     SpeechRecognition?: RecognitionConstructor;

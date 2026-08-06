@@ -8,9 +8,24 @@
  * CLAUDE.md: there is no vendor whose terms could apply.
  *
  * Verified on this machine: te-IN "Geeta" and en-IN "Rishi" are present among
- * 180 voices. Neither is guaranteed anywhere else, so every step degrades:
- * exact tag -> language prefix -> whatever the platform picks -> silence with a
- * handle that still resolves.
+ * 180 voices. Neither is guaranteed anywhere else, and MOST non-Mac devices
+ * ship no Telugu voice at all.
+ *
+ * WHAT WE WILL NOT DO IS SPEAK ONE LANGUAGE IN ANOTHER LANGUAGE'S VOICE.
+ * Handing "మూడు వేళ్ళు చూపించు" to an en-US voice does not produce accented
+ * Telugu; it produces letter-by-letter noise, or silence, in the child's
+ * primary language, on every single prompt. So resolution degrades like this:
+ *
+ *   exact tag (te-IN) -> same language, any region (te-*) -> DO NOT SPEAK
+ *
+ * with one exception, and it is the important one: while the platform has not
+ * yet produced its voice list, "no match" means "not loaded", not "not there",
+ * and we let the platform pick — some engines (older Android WebView) report an
+ * empty list forever and still speak the OS locale correctly. `voicesReady`
+ * says which of the two you are looking at, and `hasVoice(lang)` answers the
+ * question a surface actually has: can Chiku say anything in this language?
+ * A refusal is reported on the handle (`outcome: "no-voice"`) so the surface
+ * can say so out loud instead of a child watching a silent elephant.
  *
  * THE THREE BUGS THIS API IS FAMOUS FOR, AND WHAT WE DO ABOUT THEM
  * ----------------------------------------------------------------
@@ -94,6 +109,36 @@ export const MOUTH_TICK_MS = 16;
 /** Silence from an utterance for this long means the platform has stalled. */
 export const DEFAULT_STALL_MS = 5000;
 
+/**
+ * Speech pace, in characters per second at rate 1.0, used ONLY to bound how
+ * long a line that reports no progress at all may run before we give up on it.
+ *
+ * Deliberately slow (real speech is nearer 15-20 c/s, and Telugu script packs
+ * more sound per character than Latin) and then doubled by the margin below,
+ * because the cost of over-estimating is a late resolve on a device that has
+ * already gone quiet, while the cost of under-estimating is cutting a child's
+ * prompt off mid-sentence.
+ */
+export const SPEECH_CHARS_PER_SECOND = 12;
+export const SPEECH_ESTIMATE_MARGIN = 2;
+/** Nothing waits longer than this, whatever the arithmetic says. */
+export const MAX_ESTIMATE_MS = 120_000;
+
+/**
+ * How long a line of this length could plausibly take at this rate.
+ *
+ * This exists because of Android: Chrome on Android fires `end` but never fires
+ * `boundary`, so a flat 5s stall watchdog cut every line longer than about a
+ * sentence — the platform was working perfectly and we hung up on it.
+ */
+export function estimateSpeechMs(text: string, rate: number): number {
+  const chars = text.trim().length;
+  if (chars === 0) return 0;
+  const perSecond = SPEECH_CHARS_PER_SECOND * Math.max(0.1, rate);
+  const ms = (chars / perSecond) * 1000 * SPEECH_ESTIMATE_MARGIN;
+  return Math.min(MAX_ESTIMATE_MS, Math.round(ms));
+}
+
 export interface SpeakerOptions {
   /**
    * Injected platform. Defaults to `window.speechSynthesis` when present.
@@ -103,13 +148,16 @@ export interface SpeakerOptions {
   readonly rate?: number;
   readonly pitch?: number;
   /**
-   * Watchdog window. A line that reports no boundary and no end for this long
-   * is declared stalled, cleaned up, and its handle resolved.
+   * Watchdog window, applied from the last sign of life.
    *
-   * TRADE-OFF, deliberately taken: a platform that never emits `boundary` at
-   * all would have a genuinely long line cut off here. Chiku's lines are one
-   * short sentence, well under this, so the hang is the worse failure. Raise it
-   * if that ever stops being true.
+   * BOUNDARY-AWARE, because the old flat version was wrong on Android. It is
+   * only a fair measure of "the platform has stopped" once the platform has
+   * shown us it reports progress at all:
+   *   - queued but never started -> `stallMs` (nothing is happening);
+   *   - started, at least one `boundary` seen -> `stallMs` from the last one;
+   *   - started, no `boundary` ever (Chrome on Android never fires it) ->
+   *     `max(stallMs, estimateSpeechMs(text, rate))`, so a long line is allowed
+   *     the time it would actually take to say.
    */
   readonly stallMs?: number;
   /** Mouth ticker period in ms. Exposed for tests, not for tuning. */
@@ -128,9 +176,10 @@ function canonicalTag(tag: string): string {
 /**
  * Exact tag, then language prefix, then null.
  *
- * null is the platform default, which is a legitimate outcome: an en-GB voice
- * reading Indian English is far better than no voice, and a device with no
- * Telugu voice at all still has to be able to run the show.
+ * null means NO VOICE OF THIS LANGUAGE, which is a different thing from "use
+ * the default": an en-GB voice reading Indian English is a good outcome and
+ * this function finds it (`en-` prefix), but an en-GB voice reading Telugu is
+ * not speech at all. The caller decides what to do with null; see `#resolve`.
  */
 export function pickVoice(
   voices: readonly SynthVoiceLike[],
@@ -154,26 +203,79 @@ export function pickVoice(
 
 const NOOP = (): void => {};
 
+/**
+ * What happened to a line, known synchronously.
+ *
+ * `no-voice` is the one that matters: the line was NOT spoken, on purpose,
+ * because this device has no voice for that language. A surface that shows the
+ * text anyway is fine; a surface that also says so (in the other language, or
+ * with a "Chiku cannot say this out loud here" note) is better. Either way it
+ * must not be left believing Chiku spoke.
+ */
+export type SpeakOutcome = "spoken" | "empty" | "unavailable" | "no-voice";
+
+export interface SpeakResult extends SpeakHandle {
+  readonly outcome: SpeakOutcome;
+}
+
 /** Used when there is nothing to say, or nothing to say it with. */
-function settledHandle(): SpeakHandle {
-  return { done: Promise.resolve(), cancel: NOOP };
+function settledHandle(outcome: SpeakOutcome): SpeakResult {
+  return { done: Promise.resolve(), cancel: NOOP, outcome };
 }
 
 interface ActiveLine {
   settled: boolean;
   startedAt: number;
   lastBoundaryAt: number | null;
+  /** The platform has told us the utterance began. */
+  started: boolean;
+  /** …and has fired at least one `boundary`, so its silence means something. */
+  boundarySeen: boolean;
+  /** How long this line could plausibly take, for the boundary-less case. */
+  readonly estimateMs: number;
   ticker: ReturnType<typeof setInterval> | null;
   watchdog: ReturnType<typeof setTimeout> | null;
   readonly onMouth: ((open: number) => void) | undefined;
   readonly resolve: () => void;
 }
 
+/** What a language resolution knows: the voice, and whether that was final. */
+interface VoiceResolution {
+  readonly voice: SynthVoiceLike | null;
+  /** False while the platform has not produced its voice list yet. */
+  readonly ready: boolean;
+}
+
+/**
+ * A `Speaker` that can be asked what it can and cannot say.
+ *
+ * The extra members exist so a surface can tell "this device has no Telugu
+ * voice" (a fact worth telling a parent about, once) apart from "the voice list
+ * has not loaded yet" (a fact worth telling nobody).
+ */
+export interface LanguageAwareSpeaker extends Speaker {
+  /** True once the platform has actually produced a voice list. */
+  readonly voicesReady: boolean;
+  /** The voice Chiku would use for this language, or null if there is none. */
+  voiceFor(lang: VoiceLang): SynthVoiceLike | null;
+  /**
+   * Can Chiku speak this language on this device?
+   *
+   * False while the voice list has not loaded — there is genuinely no voice
+   * yet — so pair it with `voicesReady` before showing a parent anything
+   * permanent, and re-check from `onVoicesChanged`.
+   */
+  hasVoice(lang: VoiceLang): boolean;
+  /** Fires when the platform's voice list arrives or changes. */
+  onVoicesChanged(cb: () => void): () => void;
+  speak(text: string, lang: VoiceLang, onMouth?: (open: number) => void): SpeakResult;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Speaker                                                                    */
 /* -------------------------------------------------------------------------- */
 
-class OnDeviceSpeaker implements Speaker {
+class OnDeviceSpeaker implements LanguageAwareSpeaker {
   readonly #port: SynthPort | null;
   readonly #rate: number;
   readonly #pitch: number;
@@ -183,6 +285,9 @@ class OnDeviceSpeaker implements Speaker {
   /** Per-language, because resolution is the expensive-ish part, not speaking. */
   readonly #voiceCache = new Map<VoiceLang, SynthVoiceLike | null>();
   #unsubscribeVoices: (() => void) | null = null;
+  readonly #voiceListeners = new Set<() => void>();
+  /** True once `getVoices()` has returned a non-empty list at least once. */
+  #voicesResolved = false;
 
   #current: ActiveLine | null = null;
   #disposed = false;
@@ -199,6 +304,13 @@ class OnDeviceSpeaker implements Speaker {
       // empty, or may change when a language pack finishes installing.
       this.#unsubscribeVoices = this.#port.onVoicesChanged(() => {
         this.#voiceCache.clear();
+        for (const cb of [...this.#voiceListeners]) {
+          try {
+            cb();
+          } catch {
+            // A broken consumer must not stop the others from re-checking.
+          }
+        }
       });
     }
   }
@@ -211,16 +323,53 @@ class OnDeviceSpeaker implements Speaker {
     return this.#current !== null && !this.#current.settled;
   }
 
+  get voicesReady(): boolean {
+    if (this.#voicesResolved) return true;
+    // Ask again rather than answering from a stale "not yet": the list arrives
+    // asynchronously and the event that announces it is not fired everywhere.
+    return this.#readVoices().length > 0;
+  }
+
+  voiceFor(lang: VoiceLang): SynthVoiceLike | null {
+    return this.#resolve(lang).voice;
+  }
+
+  hasVoice(lang: VoiceLang): boolean {
+    const { voice, ready } = this.#resolve(lang);
+    return ready && voice !== null;
+  }
+
+  onVoicesChanged(cb: () => void): () => void {
+    this.#voiceListeners.add(cb);
+    return () => {
+      this.#voiceListeners.delete(cb);
+    };
+  }
+
   /* ---------------------------------------------------------------------- */
 
-  speak(text: string, lang: VoiceLang, onMouth?: (open: number) => void): SpeakHandle {
+  speak(text: string, lang: VoiceLang, onMouth?: (open: number) => void): SpeakResult {
     const port = this.#port;
 
     // No synthesis, disposed, or nothing to say. The caller is awaiting this;
     // it must resolve, and the mouth must be shut.
-    if (!port || this.#disposed || text.trim() === "") {
+    if (!port || this.#disposed) {
       onMouth?.(0);
-      return settledHandle();
+      return settledHandle("unavailable");
+    }
+    if (text.trim() === "") {
+      onMouth?.(0);
+      return settledHandle("empty");
+    }
+
+    // THE LANGUAGE GATE. A resolved voice list with nothing for this language
+    // means this device cannot say this. Handing it to whatever voice the
+    // platform likes produces noise in the child's own language, which is worse
+    // than silence — silence at least leaves the written line standing.
+    const resolution = this.#resolve(lang);
+    if (resolution.ready && resolution.voice === null) {
+      onMouth?.(0);
+      return settledHandle("no-voice");
     }
 
     // Barge-in: one line at a time, always. The previous line's late end/error
@@ -237,6 +386,9 @@ class OnDeviceSpeaker implements Speaker {
       settled: false,
       startedAt: now(),
       lastBoundaryAt: null,
+      started: false,
+      boundarySeen: false,
+      estimateMs: estimateSpeechMs(text, this.#rate),
       ticker: null,
       watchdog: null,
       onMouth,
@@ -254,12 +406,13 @@ class OnDeviceSpeaker implements Speaker {
       port.speak({
         text,
         lang: SPEAK_LANG_TAG[lang],
-        voice: this.#resolveVoice(lang),
+        voice: resolution.voice,
         rate: this.#rate,
         pitch: this.#pitch,
         onStart: () => {
           if (line.settled) return;
           line.startedAt = now();
+          line.started = true;
           this.#armWatchdog(line);
           this.#startMouth(line);
         },
@@ -267,6 +420,7 @@ class OnDeviceSpeaker implements Speaker {
           if (line.settled) return;
           const t = now();
           line.lastBoundaryAt = t;
+          line.boundarySeen = true;
           this.#armWatchdog(line);
           // Land the closure on the word edge instead of at the next tick, up
           // to 16ms late. A mouth that shuts a frame after the word has already
@@ -286,6 +440,7 @@ class OnDeviceSpeaker implements Speaker {
 
     return {
       done,
+      outcome: "spoken",
       cancel: () => {
         if (line.settled) return;
         this.#finish(line);
@@ -306,30 +461,38 @@ class OnDeviceSpeaker implements Speaker {
     this.#unsubscribeVoices?.();
     this.#unsubscribeVoices = null;
     this.#voiceCache.clear();
+    this.#voiceListeners.clear();
   }
 
   /* ---------------------------------------------------------------------- */
 
-  #resolveVoice(lang: VoiceLang): SynthVoiceLike | null {
-    const cached = this.#voiceCache.get(lang);
-    if (cached !== undefined) return cached;
-
+  /** One getVoices() call, and the "has the list arrived" flag it sets. */
+  #readVoices(): readonly SynthVoiceLike[] {
     let voices: readonly SynthVoiceLike[] = [];
     try {
       voices = this.#port?.getVoices() ?? [];
     } catch {
-      // A platform that throws from getVoices still gets to speak in its
-      // default voice; this is not worth failing a line over.
+      // A platform that throws from getVoices is a platform we know nothing
+      // about; treat it as "not loaded" rather than "no voices anywhere".
       voices = [];
     }
+    if (voices.length > 0) this.#voicesResolved = true;
+    return voices;
+  }
 
+  #resolve(lang: VoiceLang): VoiceResolution {
+    const cached = this.#voiceCache.get(lang);
+    if (cached !== undefined) return { voice: cached, ready: true };
+
+    const voices = this.#readVoices();
     // Bug 1 again: an empty list means "not loaded yet", never "no voices".
-    // Caching that would pin the default voice for the whole session.
-    if (voices.length === 0) return null;
+    // Caching that would pin the default voice for the whole session — and,
+    // now, would permanently mute a language the device can in fact speak.
+    if (voices.length === 0) return { voice: null, ready: false };
 
     const picked = pickVoice(voices, lang);
     this.#voiceCache.set(lang, picked);
-    return picked;
+    return { voice: picked, ready: true };
   }
 
   #startMouth(line: ActiveLine): void {
@@ -353,6 +516,25 @@ class OnDeviceSpeaker implements Speaker {
     }
   }
 
+  /**
+   * How long this line may stay silent before we declare it dead.
+   *
+   * The 5s flat window was only ever right for a platform that reports word
+   * boundaries. Chrome on Android reports none at all, so every line longer
+   * than about five seconds of speech was cut off mid-sentence — on the exact
+   * devices this show is most likely to run on.
+   */
+  #watchdogMs(line: ActiveLine): number {
+    // Never started: nothing is in flight to be long. The platform queued the
+    // utterance and forgot it, which is the fast failure.
+    if (!line.started) return this.#stallMs;
+    // Boundaries are arriving, so silence for a whole window really is a stall.
+    if (line.boundarySeen) return this.#stallMs;
+    // Started, no boundaries ever: we cannot measure progress, so we wait out
+    // the length of the line instead of guessing that it has died.
+    return Math.max(this.#stallMs, line.estimateMs);
+  }
+
   #armWatchdog(line: ActiveLine): void {
     if (line.watchdog !== null) clearTimeout(line.watchdog);
     line.watchdog = setTimeout(() => {
@@ -361,7 +543,7 @@ class OnDeviceSpeaker implements Speaker {
       // died mid-word or never started, the caller must not wait any longer.
       this.#finish(line);
       this.#port?.cancel();
-    }, this.#stallMs);
+    }, this.#watchdogMs(line));
   }
 
   /** Idempotent. Every exit path — end, error, cancel, stall — comes through here. */
@@ -447,6 +629,6 @@ export function browserSynthPort(): SynthPort | null {
 
 /* -------------------------------------------------------------------------- */
 
-export function createSpeaker(opts?: SpeakerOptions): Speaker {
+export function createSpeaker(opts?: SpeakerOptions): LanguageAwareSpeaker {
   return new OnDeviceSpeaker(opts);
 }

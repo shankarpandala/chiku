@@ -186,8 +186,9 @@ function text(): string {
 
 async function flush(): Promise<void> {
   await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
+    // Deep enough to settle the model warm-up chain that now sits between the
+    // camera tap and getUserMedia (warmVision → Promise.all → openEyes).
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
   });
 }
 
@@ -201,7 +202,14 @@ function mount(): void {
   });
 }
 
-/** welcome → camera-ask → playing. `grant` decides which playing mode. */
+/**
+ * welcome → camera-ask → (models warm) → playing. `grant` decides which
+ * playing mode.
+ *
+ * The warm-up step is new: the surface now downloads the vision models with
+ * the camera still dark and only then calls getUserMedia (see
+ * surface-reality.test.tsx). `okFetch` below is what makes that step succeed.
+ */
 async function enterPlaying(grant: boolean): Promise<void> {
   vision.state.grant = grant;
   mount();
@@ -213,6 +221,15 @@ async function enterPlaying(grant: boolean): Promise<void> {
   await flush();
 }
 
+/** A network that hands back every vision asset without complaint. */
+function okFetch(): void {
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      ({ ok: true, status: 200, blob: async () => null }) as unknown as Response,
+  );
+}
+
 function pushFrames(frames: readonly VisionFrame[]): void {
   act(() => {
     for (const f of frames) vision.push(f);
@@ -221,6 +238,7 @@ function pushFrames(frames: readonly VisionFrame[]): void {
 
 beforeEach(() => {
   vision.reset();
+  okFetch();
   rig = makeRigSpy();
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -230,6 +248,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.unstubAllGlobals();
 });
 
 /* -------------------------------------------------------------------------- */
