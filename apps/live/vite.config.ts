@@ -41,7 +41,17 @@ function csp(isDev: boolean): Plugin {
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), csp(mode !== "production")],
-  server: { port: 5175 },
+  server: {
+    port: 5175,
+    // Bind every interface, not just IPv6 loopback. Without this, Vite listens
+    // on [::1] alone: http://127.0.0.1:5175 is refused, and no phone on the LAN
+    // can reach it at all — which matters here, because the camera is the point
+    // and desktop browsers are not where a child would use this.
+    // NOTE: phone testing still needs HTTPS. getUserMedia requires a secure
+    // context, and plain http:// over a LAN address is not one (localhost is
+    // the only exempt origin). Use a tunnel or a local cert for real devices.
+    host: true,
+  },
   // The .task bundles are float16 and barely compress; don't waste build time.
   build: { assetsInlineLimit: 0 },
 }));
