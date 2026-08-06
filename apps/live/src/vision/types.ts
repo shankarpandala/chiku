@@ -7,6 +7,7 @@
 // only thing that ever leaves `vision/` is the small structured summary below.
 
 import type { VisionCalibration } from "./calibration";
+import type { Quad } from "./quad";
 
 /** Normalized gaze/attention derived from the face. */
 export interface FaceSignal {
@@ -66,6 +67,38 @@ export interface VisionFrame {
    * random.
    */
   facePresence?: number;
+  /**
+   * The magic window the PRIMARY person is making with their hands, or null
+   * when there is none. Nobody else's hands can make one — a sibling reaching
+   * into frame must not take the child's window away from them.
+   *
+   * `quad.presence` is a 0..1 fade, not a boolean: bind opacity to it and the
+   * window eases in and out and survives a tracker blink. Treating
+   * `quad !== null` as "showing" and jumping straight to full opacity throws
+   * away the whole point of the smoothing behind it.
+   *
+   * Optional only so existing frame literals keep compiling; the engine always
+   * sets it, to a value or to null.
+   */
+  quad?: Quad | null;
+  /**
+   * How much of the magic window is the colour the current hunt is asking for,
+   * 0..1 — `undefined` when nothing is measuring.
+   *
+   * THIS ONE DOES NOT COME FROM THE VISION LAYER, and that is deliberate. The
+   * lens already has to read the window's pixels back to *draw* the effect
+   * (see magicLens.ts on why the pass is CPU), so the coverage number falls
+   * out of the render pass for free. Computing it a second time inside the
+   * engine would mean two samplers, two thresholds, and two chances to
+   * disagree about whether the child found the red thing — while the child
+   * watches one of them glow.
+   *
+   * So the surface merges the render layer's latest figure onto the frame
+   * before an activity sees it, and the activity contract stays "one
+   * predicate over one frame". Nothing here is stored or transmitted: the
+   * pixels it was derived from lived for one paint (§9).
+   */
+  windowCoverage?: number;
 }
 
 export type VisionStatus =

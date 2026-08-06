@@ -20,6 +20,7 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -27,7 +28,15 @@ import {
 } from "react";
 import { createLiveRig, type Emote, type LiveRig, type Viseme } from "@chiku/rig";
 import { HysteresisGate, Presence, type Hysteresis } from "../vision/stability";
+import type { Quad } from "../vision/quad";
 import type { FaceSignal, VisionFrame } from "../vision/types";
+import {
+  MagicWindow,
+  type HuntColour,
+  type MagicWindowHandle,
+  type MagicWindowMode,
+} from "./MagicWindow";
+import { quadGaze, WINDOW_GAZE_PRESENCE } from "./magicWindowGeometry";
 
 export type RigFactory = typeof createLiveRig;
 
@@ -40,6 +49,21 @@ export type RigFactory = typeof createLiveRig;
  * tracking at all.
  */
 const MIRROR_X = -1;
+
+/**
+ * The frame's window, normalised to "a quad or nothing".
+ *
+ * This used to widen `VisionFrame` with a structural `{ quad?: Quad | null }`
+ * and assert its way onto it, because the field was still landing in the
+ * vision layer. It has landed: `quad` is on VisionFrame now, so the cast is
+ * gone and the only thing left here is the `undefined`→`null` fold that every
+ * consumer wants. An enforced contract beats an asserted one — with the cast
+ * in place, the vision layer could have renamed or retyped the field and this
+ * file would have compiled all the way to a child's device.
+ */
+export function frameQuad(frame: VisionFrame): Quad | null {
+  return frame.quad ?? null;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Attention — one debounced answer, shared by the rig and the teal cue        */
@@ -176,6 +200,11 @@ export interface CameraStageHandle {
   setAttention(on: boolean): void;
   /** The local video sink the vision engine attaches the stream to. */
   video(): HTMLVideoElement | null;
+  /**
+   * The magic window, or null when no `windowMode` is set. An activity reads
+   * `coverage()` off this to know whether the child found the red thing.
+   */
+  magicWindow(): MagicWindowHandle | null;
 }
 
 interface CameraStageProps {
@@ -187,17 +216,37 @@ interface CameraStageProps {
   videoLabel: string;
   /** Test seam — defaults to the real live rig. */
   rigFactory?: RigFactory;
+  /**
+   * Turn the magic window on, and say what it shows. Omitted means no window is
+   * mounted at all — the quad on the frame is simply ignored.
+   */
+  windowMode?: MagicWindowMode;
+  /** Which colour the lens keeps. Only meaningful for `windowMode="lens"`. */
+  huntColour?: HuntColour;
+  /** Lens coverage, 0..1, whenever it moves meaningfully. */
+  onWindowCoverage?: (coverage: number) => void;
   /** Status pill / overlay content rendered on top of the frame. */
   children?: ReactNode;
 }
 
 export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(function CameraStage(
-  { cameraOn, attending, reducedMotion, videoLabel, rigFactory, children },
+  {
+    cameraOn,
+    attending,
+    reducedMotion,
+    videoLabel,
+    rigFactory,
+    windowMode,
+    huntColour,
+    onWindowCoverage,
+    children,
+  },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const rigRef = useRef<LiveRig | null>(null);
+  const windowRef = useRef<MagicWindowHandle | null>(null);
   /** Non-null while speech owns the jaw; see setMouthOpen. */
   const speechMouthRef = useRef<number | null>(null);
   /** The one attention gate. Survives rig re-creation; the child has not moved. */
@@ -233,6 +282,11 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
         // React's mounting order.
         const attending = attentionRef.current.update(face, frame.facePresence);
 
+        // The window is painted straight from here, at camera rate, without a
+        // React render — same reason the rig is (see the header).
+        const quad = frameQuad(frame);
+        windowRef.current?.setQuad(quad);
+
         const rig = rigRef.current;
         if (!rig) return attending;
         const talking = speechMouthRef.current !== null;
@@ -257,6 +311,15 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
             rig.setMouthOpen(0);
           }
         }
+
+        // A window the child is really holding OUTRANKS their face: the whole
+        // point of the thing is that Chiku is looking through it with them, and
+        // a child watching him keep his eyes on their nose instead of on the
+        // window they just made would learn that he is not really with them.
+        if (quad !== null && quad.presence >= WINDOW_GAZE_PRESENCE) {
+          const g = quadGaze(quad);
+          rig.setGaze(g.x, g.y);
+        }
         rig.setAttention(attending);
         return attending;
       },
@@ -279,9 +342,14 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
         rigRef.current?.setAttention(on);
       },
       video: () => videoRef.current,
+      magicWindow: () => windowRef.current,
     }),
     [],
   );
+
+  // Stable so MagicWindow's props do not churn; it reads the sink at paint time
+  // rather than holding a reference to it.
+  const source = useCallback((): HTMLVideoElement | null => videoRef.current, []);
 
   const className = [
     "stage",
@@ -305,6 +373,19 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
           data-testid="self-view"
         />
       </div>
+      {/* Over the video, under Chiku: the window is something the child holds
+          up in front of the room, not something painted over their friend. */}
+      {windowMode !== undefined && (
+        <MagicWindow
+          ref={windowRef}
+          mode={windowMode}
+          target={huntColour}
+          mirrored
+          reducedMotion={reducedMotion}
+          source={source}
+          onCoverage={onWindowCoverage}
+        />
+      )}
       <div className="stage-chiku" ref={hostRef} data-testid="chiku-host" />
       {children}
     </div>

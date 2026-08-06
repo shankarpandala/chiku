@@ -125,6 +125,29 @@ body {
   opacity: 0;
 }
 
+/* --- the magic window -----------------------------------------------------
+   A canvas the size of the stage, over the video and under Chiku, in which the
+   window the child makes with their hands is drawn.
+
+   THE CANVAS IS NOT MIRRORED HERE. The <video> above is (`scaleX(-1)`), but the
+   quad arrives in raw image space and is flipped in JS, in one tested function
+   (magicWindowGeometry.projectQuad). Mirroring this element as well would flip
+   it twice and the window would slide the wrong way under the child's own
+   hands. If you are tempted to add a transform here, read that file first.
+
+   No transition on opacity either: presence is ALREADY a fade (stability.ts),
+   and a CSS ease on top of it would lag the child's hands by a further beat.
+
+   No teal anywhere in this block. Teal means "Chiku is hearing you" (§9); a
+   second teal object on the same stage would make the first one meaningless. */
+.magic-window {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 /* Chiku sits beside the child, bottom-right, feet in the same frame. */
 .stage-chiku {
   position: absolute;
@@ -416,6 +439,60 @@ body {
   height: 58%;
 }
 
+/* --- colour hunt --------------------------------------------------------- */
+/*
+   The tap answer for "find something red" is a block of red. These four hexes
+   are NOT from the kid palette — that palette is warm and muted by design, and
+   a muted rose standing in for "red" would teach the wrong word. They are the
+   same values as HUNT_SWATCH in components/magicLens.ts, which are themselves
+   inside the hue bands the lens accepts, so the swatch a child taps and the
+   pixels that light up inside their window are one claim, not two.
+
+   None of them is teal. Teal means "Chiku is hearing you" (§9) and is not
+   something a child may be sent hunting for. */
+.choice-swatch,
+.demo-swatch {
+  border-radius: 20px;
+  /* A rim, because a saturated block on a sand button needs an edge to read as
+     an object rather than as a hole punched in the screen. */
+  border: 3px solid color-mix(in srgb, var(--kid-ink) 22%, transparent);
+  background: var(--kid-sand);
+}
+
+.choice-swatch {
+  width: 62%;
+  height: 62%;
+}
+
+.choice-swatch[data-colour="red"],
+.demo-swatch[data-colour="red"] {
+  background: #d92d20;
+}
+
+.choice-swatch[data-colour="green"],
+.demo-swatch[data-colour="green"] {
+  background: #2f9e44;
+}
+
+.choice-swatch[data-colour="yellow"],
+.demo-swatch[data-colour="yellow"] {
+  background: #f2c200;
+}
+
+.choice-swatch[data-colour="blue"],
+.demo-swatch[data-colour="blue"] {
+  background: #1f6fd0;
+}
+
+/* Chiku holding the colour up on the "watch me" rung. Sits under the prompt,
+   the size of a hand, so it reads as something he is showing rather than as
+   another button to press. */
+.demo-swatch {
+  width: clamp(72px, 12vmin, 108px);
+  height: clamp(72px, 12vmin, 108px);
+  margin: 0 auto;
+}
+
 /* --- streak -------------------------------------------------------------- */
 
 .streak {
@@ -527,6 +604,14 @@ body {
 
   .choice-digit {
     font-size: clamp(30px, 10vh, 52px);
+  }
+
+  /* A phone held sideways is the tightest budget on the surface, and the
+     demonstration swatch is competing with the prompt AND the answer row. */
+  .demo-swatch {
+    width: clamp(48px, 12vh, 76px);
+    height: clamp(48px, 12vh, 76px);
+    border-radius: 16px;
   }
 
   .star {

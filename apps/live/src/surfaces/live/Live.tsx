@@ -38,6 +38,9 @@ import type { Emote } from "@chiku/rig";
 import { Bilingual } from "../../components/Bilingual";
 import { BigButton } from "../../components/BigButton";
 import { CameraStage, type CameraStageHandle, type RigFactory } from "../../components/CameraStage";
+import type { MagicWindowMode } from "../../components/MagicWindow";
+import type { HuntColour } from "../../components/magicLens";
+import { HUNT_PRESENCE } from "../../activities/hunt";
 import { ChoiceButton } from "../../components/ChoiceButton";
 import { StreakStars } from "../../components/StreakStars";
 import { TalkButton } from "../../components/TalkButton";
@@ -108,6 +111,24 @@ const TOGETHER_LEAD_MS = 700;
 
 /** After counting along, a beat of nothing, and then the round succeeds. */
 const TOGETHER_SETTLE_MS = 400;
+
+/**
+ * How long Chiku waits before asking the child to make a window with their
+ * hands.
+ *
+ * The colour hunt is the one activity whose input device the child has to BUILD
+ * before they can use it, so it is the one prompt that needs a second sentence.
+ * Late enough that "Find something red!" has landed on its own — a child who
+ * already knows the gesture should get to just do it — and the invitation is
+ * skipped entirely if a window is already open, because telling a child to do
+ * the thing they are visibly doing is how a toy stops feeling like it is
+ * watching them.
+ *
+ * The wording (`window.invite`) covers all three gestures on purpose: a palm, a
+ * pinch and two hands are all "a little window with your hands", and naming one
+ * of them would fail the age band that cannot do it (see vision/quad.ts).
+ */
+const WINDOW_INVITE_MS = 2000;
 
 const PRAISES: readonly I18nKey[] = ["praise.one", "praise.two", "praise.three"];
 
@@ -253,6 +274,21 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const interactedRef = useRef(false);
   /** The detector relaxation currently in force. See activities/assist.ts. */
   const relaxRef = useRef<Relaxation>(relaxFor("none"));
+  /**
+   * The magic window's latest lens coverage, 0..1, straight off the render
+   * layer (CameraStage → MagicWindow → onWindowCoverage).
+   *
+   * A ref rather than state because it moves at camera rate and nothing draws
+   * from it — it is merged onto the vision frame in `handleFrame` so the hunt
+   * activity can read it as an ordinary field. See vision/types.ts for why the
+   * number is measured in the renderer rather than in the vision layer.
+   */
+  const windowCoverageRef = useRef(0);
+  /** A window the child is really holding, right now. Drives the invitation. */
+  const windowOpenRef = useRef(false);
+  const [windowOpen, setWindowOpen] = useState(false);
+  /** The colour Chiku is holding up on the "watch me" rung, or null. */
+  const [demoSwatch, setDemoSwatch] = useState<HuntColour | null>(null);
   /** The warm retry line is showing. Never a failure, just a nudge. */
   const [nudge, setNudge] = useState(false);
   const [nudgedId, setNudgedId] = useState<string | null>(null);
@@ -306,6 +342,17 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
 
   const setEmote = useCallback((emote: Emote): void => {
     stageRef.current?.setEmote(emote);
+  }, []);
+
+  /**
+   * The lens's latest reading, parked where the frame handler can find it.
+   *
+   * Stable identity on purpose: this crosses into MagicWindow, which paints
+   * from a ref of its own props, and a new function every render is a prop
+   * churn the camera-rate path should not have to notice.
+   */
+  const takeWindowCoverage = useCallback((coverage: number): void => {
+    windowCoverageRef.current = coverage;
   }, []);
 
   // --- voice ---------------------------------------------------------------
@@ -491,11 +538,16 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
         later(() => {
           if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
           setEmote(beat.emote);
+          // A pose cannot mean "red", so the colour game's demonstration is a
+          // block of colour Chiku holds up. Set on every beat, not just the
+          // ones that carry it, so the swatch cannot outlive its own beat.
+          setDemoSwatch(beat.swatch ?? null);
           if (beat.key) say(beat.key, beat.values, beat.emote, beat.emote);
         }, when);
         at += beat.ms;
       }
       later(() => {
+        setDemoSwatch(null);
         if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
         done();
       }, at);
@@ -595,6 +647,10 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     setAssistLevel("none");
     attemptsRef.current = 0;
     setHoldProgress(0);
+    setDemoSwatch(null);
+    // Whatever the last window found belongs to the last prompt. Carrying it
+    // over would hand the next hunt a finished answer before it was asked.
+    windowCoverageRef.current = 0;
     applyAssist("none");
     // No camera → the tap answers ARE the game, so they are there immediately.
     setAssist(cameraModeRef.current !== "on");
@@ -604,8 +660,16 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     // only worked if a grown-up was narrating.
     const opening = roundRef.current[indexRef.current];
     if (opening) say(opening.promptKey, opening.promptValues, "encouraging", "listening");
+    // The hunt is the one prompt whose input device the child has to build
+    // first, so it gets a second sentence — unless they have already built it.
+    if (opening?.kind === "hunt" && cameraModeRef.current === "on") {
+      later(() => {
+        if (roundStateRef.current !== "prompt" || windowOpenRef.current) return;
+        say("window.invite", undefined, "encouraging", "listening");
+      }, WINDOW_INVITE_MS);
+    }
     armMissTimer();
-  }, [applyAssist, armMissTimer, say, setEmote]);
+  }, [applyAssist, armMissTimer, later, say, setEmote]);
 
   const goGoodbye = useCallback((): void => {
     clearTimers();
@@ -667,6 +731,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     setRoundState("praise");
     setNudge(false);
     setNudgedId(null);
+    setDemoSwatch(null);
     setStreak((s) => s + 1);
     // PRAISE IS CHOSEN BY EFFORT, NOT BY OUTCOME. It used to be a coin toss
     // between three interchangeable cheers, which meant the easiest win got
@@ -720,15 +785,34 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
         setAttending(seen);
       }
 
+      // 1b. The window, AFTER applyFrame — which is the call that painted it,
+      //     and therefore the call that produced this frame's coverage number.
+      //     Chiku's eyes are already on it: CameraStage points the gaze at the
+      //     quad's centre whenever one is solid enough, so he is visibly
+      //     looking through it with the child rather than at their nose.
+      const quad = frame.quad ?? null;
+      const open = quad !== null && quad.presence >= HUNT_PRESENCE;
+      if (open !== windowOpenRef.current) {
+        windowOpenRef.current = open;
+        setWindowOpen(open);
+      }
+      // No window, nothing measured. The lens stops REPORTING when the window
+      // vanishes rather than reporting a zero, so without this the last figure
+      // would sit in the ref and greet the next window as an instant find.
+      if (quad === null) windowCoverageRef.current = 0;
+
       // 2. Then the game.
       if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
       const activity = roundRef.current[indexRef.current];
       if (!activity) return;
+      // The render layer's answer, merged in before any activity sees the
+      // frame, so the Activity contract stays "one predicate over one frame".
+      const scored: VisionFrame = { ...frame, windowCoverage: windowCoverageRef.current };
       // Tri-state: a frame that could not answer the question is "unknown" and
       // costs the child nothing. See activities/hold.ts. The hold length is the
       // activity's, scaled by whatever rung of the ladder we are on.
       const holdMs = holdMsFor(activity);
-      if (holdRef.current.update(verdictFor(activity, frame), frame.t, holdMs)) {
+      if (holdRef.current.update(verdictFor(activity, scored), scored.t, holdMs)) {
         setHoldProgress(0);
         succeed();
         return;
@@ -1167,6 +1251,30 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const cameraOn = cameraMode === "on";
   const cameraRefused = status === "denied" || status === "unavailable" || status === "error";
 
+  /**
+   * What the magic window shows.
+   *
+   * During the colour hunt it is the LENS: the window drains everything that is
+   * not the target colour, which is both the effect and the measurement.
+   *
+   * The rest of the time it is a STICKER, and that is a deliberate choice
+   * rather than a leftover. Three reasons. It makes Chiku's eyes honest — the
+   * gaze override in CameraStage fires on any quad, so with no window drawn he
+   * would be visibly staring at nothing. It teaches the gesture before the game
+   * needs it: a child who discovers the star while waving already knows how to
+   * make a window when "find something red!" arrives, which is the difference
+   * between a hunt that starts and one that stalls on the invitation. And it
+   * costs nothing — sticker mode reads no pixels at all (no getImageData, no
+   * lens pass), so it is a clip and a star per frame.
+   *
+   * It is marigold, never teal (§9).
+   */
+  const windowMode: MagicWindowMode = activity?.kind === "hunt" ? "lens" : "sticker";
+  /** Only the hunt names a colour; the lens ignores it in any other mode. */
+  const huntColour: HuntColour | undefined = activity?.huntColour;
+  /** The hunt is up, the camera is on, and no window has been made yet. */
+  const inviteWindow = activity?.kind === "hunt" && cameraOn && !windowOpen;
+
   return (
     <main className="live" data-phase={phase} data-camera={cameraMode} data-assist={assistLevel}>
       <CameraStage
@@ -1176,6 +1284,9 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
         reducedMotion={reducedMotion}
         videoLabel={tIn(lang, "stage.videoLabel")}
         rigFactory={rigFactory}
+        windowMode={windowMode}
+        huntColour={huntColour}
+        onWindowCoverage={takeWindowCoverage}
       >
         {cameraOn && (
           // Teal, on the FRAME rather than on Chiku: the live rig wears no UI.
@@ -1287,6 +1398,25 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
                 <h1 className="live-prompt">
                   <Bilingual k={activity.promptKey} values={activity.promptValues} />
                 </h1>
+                {/* Chiku holding the colour up on the "watch me" rung. Not a
+                    control — it is the thing being imitated. */}
+                {demoSwatch !== null && (
+                  <div
+                    className="demo-swatch"
+                    data-colour={demoSwatch}
+                    data-testid="demo-swatch"
+                    aria-hidden="true"
+                  />
+                )}
+                {/* Make the input device first. Only while there is a camera
+                    and no window: with the camera off the hunt is a tap game
+                    like every other activity, and asking for hands there would
+                    be an instruction the child cannot follow. */}
+                {inviteWindow && (
+                  <p className="live-note">
+                    <Bilingual k="window.invite" inline />
+                  </p>
+                )}
                 {nudge && (
                   <p className="live-retry">
                     <Bilingual k={activity.retryKey} inline />

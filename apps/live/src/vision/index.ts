@@ -46,6 +46,36 @@ export {
 export { faceToGaze, type BlendshapeCategory } from "./gaze";
 
 export {
+  LM,
+  QUAD_THRESHOLDS,
+  frameCorners,
+  handScale,
+  pinchCorners,
+  polygonArea,
+  quadCentre,
+  squareAround,
+  type Quad,
+  type QuadKind,
+} from "./quad";
+
+export {
+  KIND_SWITCH_FRAMES,
+  MIN_HAND_SCALE,
+  PALM_WINDOW_HALF_SCALES,
+  PALM_WINDOW_MAX_HALF,
+  QUAD_JUMP_THRESHOLD,
+  QUAD_LADDER,
+  QuadDetector,
+  StableQuad,
+  isPinchShape,
+  opennessOf,
+  palmCentre,
+  spreadOf,
+  type Corners,
+  type HandLandmarks,
+} from "./quad-detect";
+
+export {
   WAVE_MIN_DIRECTION_CHANGES,
   WAVE_WINDOW_MS,
   WaveDetector,

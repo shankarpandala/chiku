@@ -716,9 +716,13 @@ describe("together — the round ends in praise regardless", () => {
     tapWrong();
     tapWrong();
 
-    // Whatever the copy layer supplies, this rung is never mute and never a
-    // telling-off. `praise.nudge` is the guaranteed floor.
-    expect(voice.said().at(-1)).toBe("Nearly! Let's try that one together.");
+    // This rung is never mute and never a telling-off. It used to fall back to
+    // `praise.nudge` ("Nearly! Let's try that one together.") only because
+    // `demo.together` had never been written — an apology standing in for an
+    // invitation. The real line invites, and claims nothing went wrong.
+    const spoken = voice.said().at(-1) ?? "";
+    expect(spoken).toBe("Let's do it together!");
+    expect(spoken.toLowerCase()).not.toMatch(/nearly|almost|wrong|no\b/);
   });
 
   it("carries the child through a whole round without one correct answer", async () => {
