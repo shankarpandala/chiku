@@ -57,13 +57,33 @@ body {
   gap: clamp(8px, 1.6vmin, 16px);
   text-align: center;
   max-width: min(92vw, 640px);
+  /* Last-resort escape hatch. Every layout below is meant to fit, but a child
+     must never be unable to REACH an answer button because a device we did not
+     anticipate is 40px shorter than we assumed. */
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+/* Streak and the sun-arc share a line so the footer costs one row, not two. */
+.live-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2vmin, 20px);
+  flex-wrap: wrap;
 }
 
 /* --- the stage ----------------------------------------------------------- */
 
+/* THE STAGE IS HEIGHT-CAPPED, not just width-capped.
+   `width: min(92vw, 620px)` with a 4/3 ratio is a portrait-only assumption: on
+   a 740x360 landscape phone it makes the stage 620x465, taller than the whole
+   viewport, and the prompt and the answer buttons are pushed off the bottom of
+   a page that does not scroll. The third term is the fix — the stage may never
+   claim more than 58% of the viewport height, whatever the width allows. */
 .stage {
   position: relative;
-  width: min(92vw, 620px);
+  width: min(92vw, 620px, calc(58vh * 4 / 3));
   aspect-ratio: 4 / 3;
   border-radius: 36px;
   background: var(--kid-sand);
@@ -347,6 +367,109 @@ body {
   fill: var(--kid-marigold);
 }
 
+/* --- the sun-to-moon arc -------------------------------------------------- */
+
+.session-arc {
+  width: clamp(88px, 16vmin, 136px);
+  height: auto;
+  overflow: visible;
+}
+
+.session-arc-track {
+  fill: none;
+  stroke: #e7dcc8;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 1 9;
+}
+
+.session-arc-marker {
+  fill: var(--kid-marigold);
+}
+
+.session-arc-marker.is-night {
+  fill: var(--kid-chiku-dark);
+}
+
+/* --- landscape -----------------------------------------------------------
+   A 740x360 phone held sideways is not an edge case: it is how a child hands
+   a phone to a sibling, and how every tablet sits in a stand. Portrait stacks
+   the stage above the panel; in a short viewport that stack cannot fit, so the
+   two go side by side and the panel scrolls on its own if it has to.
+
+   Keyed on HEIGHT rather than on `orientation` alone, because a tall tablet in
+   landscape has room for the stack and looks better keeping it. */
+
+@media (orientation: landscape) and (max-height: 620px) {
+  .live {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: clamp(12px, 2.4vw, 28px);
+    padding: clamp(10px, 2vmin, 20px);
+  }
+
+  .stage {
+    /* Height-led here: fill the short axis, take whatever width that implies. */
+    flex: 0 0 auto;
+    width: min(46vw, calc(86vh * 4 / 3));
+    border-radius: 28px;
+  }
+
+  .panel {
+    flex: 1 1 auto;
+    max-width: min(52vw, 560px);
+    max-height: 96vh;
+    overflow-y: auto;
+    gap: clamp(6px, 1.4vh, 12px);
+  }
+
+  /* Everything shrinks toward the short axis so the answers stay on screen. */
+  .live-greeting,
+  .live-prompt {
+    font-size: clamp(20px, 5.4vh, 34px);
+  }
+
+  .live-praise {
+    font-size: clamp(22px, 6vh, 38px);
+  }
+
+  .big-btn {
+    min-height: 60px;
+    padding: 12px 28px;
+    font-size: clamp(17px, 4vh, 24px);
+  }
+
+  .live-quiet {
+    min-height: 52px;
+    padding: 10px 20px;
+  }
+
+  .choice {
+    width: clamp(64px, 18vh, 104px);
+    height: clamp(64px, 18vh, 104px);
+    border-radius: 22px;
+  }
+
+  .choice-digit {
+    font-size: clamp(30px, 10vh, 52px);
+  }
+
+  .star {
+    width: 26px;
+    height: 26px;
+  }
+
+  .session-arc {
+    width: clamp(72px, 14vh, 108px);
+  }
+
+  /* The promise is grown-up chrome; it is the first thing that may scroll. */
+  .live-promise {
+    font-size: 12px;
+  }
+}
+
 /* --- reduced motion ------------------------------------------------------
    The rig is already built static (reducedMotion is passed to createLiveRig);
    this kills the CSS side: the wobble, the glow transition, the press. */
@@ -363,13 +486,160 @@ body {
   }
 }
 
-/* Cloud ears — the grown-up consent block on the camera-ask screen. */
+/* Cloud ears — the grown-up consent block. It lives in the grown-up sheet now,
+   NOT on the camera-ask screen the child sits on alone every session. */
 .cloud-ears {
   margin-top: 12px;
   padding: 14px 18px;
   border: 2px dashed var(--color-divider, #b8b0a0);
   border-radius: 12px;
   max-width: 560px;
+}
+
+/* --- the grown-up door ---------------------------------------------------- */
+
+/* Quiet, cornered, out of the child's line through the screen — but never
+   hidden: a parent has to be able to find it without being told. */
+.grownup-corner {
+  position: fixed;
+  top: max(8px, env(safe-area-inset-top));
+  right: max(8px, env(safe-area-inset-right));
+  z-index: 5;
+  opacity: 0.55;
+}
+
+.grownup-corner:hover,
+.grownup-corner:focus-within {
+  opacity: 1;
+}
+
+.hold-corner {
+  font-size: 11px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--kid-sand) 80%, transparent);
+}
+
+.grownup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--kid-ink) 55%, transparent);
+}
+
+.grownup-sheet {
+  width: min(560px, 100%);
+  max-height: 92vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+  padding: 22px;
+  border-radius: 24px;
+  background: var(--kid-cream);
+  box-shadow: 0 12px 40px rgb(44 42 53 / 32%);
+}
+
+.grownup-heading {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--kid-chiku-dark);
+}
+
+.grownup-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.grownup-label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.grownup-stepper {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.grownup-step {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 2px solid #e7dcc8;
+  background: var(--kid-sand);
+  color: var(--kid-ink);
+  font-size: 24px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.grownup-step:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.grownup-limit-value {
+  min-width: 8ch;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.grownup-close {
+  margin-top: 4px;
+}
+
+/* --- warm-up ------------------------------------------------------------- */
+
+/* Three dots, breathing. No percentage: a number a pre-reader cannot read is
+   just anxiety, and a stalled number is worse than no number at all. Killed
+   by the reduced-motion block below, which is why the copy carries the
+   meaning and this only decorates it. */
+.warm-dots {
+  display: flex;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.warm-dots span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--kid-marigold);
+  animation: warm-pulse 1200ms ease-in-out infinite;
+}
+
+.warm-dots span:nth-child(2) {
+  animation-delay: 160ms;
+}
+
+.warm-dots span:nth-child(3) {
+  animation-delay: 320ms;
+}
+
+@keyframes warm-pulse {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
 }
 
 .hold-button {

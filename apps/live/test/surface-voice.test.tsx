@@ -338,9 +338,42 @@ function fire(el: Element | null, type: string): void {
 
 async function flush(): Promise<void> {
   await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
+    // Deep enough to settle the model warm-up chain that now sits between the
+    // camera tap and getUserMedia (warmVision → Promise.all → openEyes).
+    for (let i = 0; i < 10; i += 1) await Promise.resolve();
   });
+}
+
+/** A network that hands back every vision asset without complaint. */
+function okFetch(): void {
+  vi.stubGlobal(
+    "fetch",
+    async () =>
+      ({ ok: true, status: 200, blob: async () => null }) as unknown as Response,
+  );
+}
+
+/**
+ * Walk the grown-up route to the settings sheet: hold the corner control.
+ * HoldButton measures with `performance.now()`, so tests on fake timers must
+ * advance that too — the `toFake: [... "performance"]` lists below do it.
+ */
+function openGrownUpSheet(): void {
+  const corner = container.querySelector<HTMLButtonElement>(".grownup-corner .hold-button");
+  if (!corner) throw new Error("no grown-up corner control");
+  act(() => {
+    corner.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  });
+  act(() => {
+    vi.advanceTimersByTime(2200);
+  });
+}
+
+/** The cloud-ears consent hold, inside the sheet. Five seconds, deliberately. */
+function cloudHold(): HTMLButtonElement | null {
+  return container.querySelector<HTMLButtonElement>(
+    "[data-testid='grownup-sheet'] .cloud-ears .hold-button",
+  );
 }
 
 function mount(lang: Lang = "en"): void {
@@ -368,6 +401,7 @@ async function enterPlaying(grant: boolean, lang: Lang = "en"): Promise<void> {
 beforeEach(() => {
   vision.reset();
   voice.reset();
+  okFetch();
   rig = makeRigSpy();
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -377,14 +411,19 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.unstubAllGlobals();
 });
 
 /* -------------------------------------------------------------------------- */
 
 describe("Chiku speaks", () => {
-  it("greets out loud the moment he is on screen", () => {
+  it("greets out loud the moment he is on screen", async () => {
     mount();
     expect(voice.last()?.text).toBe("Hi! I am Chiku. I want to see you!");
+    // Settle the on-device recognition probe, which now resolves at mount
+    // rather than on the first phase change. Nothing above depends on it; this
+    // only keeps its setState inside act().
+    await flush();
   });
 
   it("says the activity prompt when a round starts", async () => {
@@ -726,37 +765,53 @@ describe("cloud ears — the parent's deliberate choice (doc v0.3)", () => {
     expect(voice.state.listenerOpts.every((o) => o.allowCloudRecognition !== true)).toBe(true);
   });
 
-  it("the consent block appears on the camera-ask screen when local speech is missing", async () => {
+  // MOVED (phase 2, audit finding 11). The consent block used to live on the
+  // camera-ask screen — the screen the child is on alone, every session —
+  // behind a 2s hold. It is now behind the corner control and a 5s hold, on a
+  // grown-up sheet. These tests follow it there; the WORDS are unchanged, and
+  // that is checked, because the honesty of the wording was never the problem.
+  it("is NOT on the camera-ask screen, even with local speech missing", async () => {
     voice.state.onDevice = false;
     mount();
     click(action("welcome.begin"));
     await flush();
-    expect(container.querySelector(".cloud-ears")).not.toBeNull();
-    expect(text()).toContain("internet ears");
+    expect(container.querySelector(".cloud-ears")).toBeNull();
+    expect(text()).not.toContain("internet ears");
   });
 
-  it("holding the toggle for 2s rebuilds the listener with cloud accepted and shows the talk button", async () => {
+  it("holding the sheet toggle rebuilds the listener with cloud accepted and shows the talk button", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance"] });
     try {
       voice.state.onDevice = false;
       mount();
-      click(action("welcome.begin"));
       await act(async () => {
         await Promise.resolve();
       });
 
-      const hold = container.querySelector(".hold-button");
+      openGrownUpSheet();
+      const hold = cloudHold();
       expect(hold).not.toBeNull();
+      expect(text()).toContain("internet ears");
+
       act(() => {
         hold!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
       });
+      // Two seconds — what used to be the whole gate — must NOT be enough.
       await act(async () => {
         vi.advanceTimersByTime(2100);
+      });
+      expect(window.localStorage.getItem("chiku.live.cloudEars.v1")).toBeNull();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3100);
       });
 
       // Persisted for next launch, and the listener was rebuilt with the flag.
       expect(window.localStorage.getItem("chiku.live.cloudEars.v1")).toBe("true");
       expect(voice.state.listenerOpts.at(-1)?.allowCloudRecognition).toBe(true);
+
+      click(action("grownup.close"));
+      click(action("welcome.begin"));
 
       // The child surface now offers the mic — with the honesty tag.
       const allow = action("camera.allow");
@@ -765,7 +820,7 @@ describe("cloud ears — the parent's deliberate choice (doc v0.3)", () => {
       });
       await act(async () => {
         vi.advanceTimersByTime(50);
-        await Promise.resolve();
+        for (let i = 0; i < 10; i += 1) await Promise.resolve();
       });
       expect(container.querySelector(".talk-btn")).not.toBeNull();
       expect(text()).toContain("Chiku's ears use the internet");
@@ -779,22 +834,23 @@ describe("cloud ears — the parent's deliberate choice (doc v0.3)", () => {
     try {
       voice.state.onDevice = false;
       mount();
-      click(action("welcome.begin"));
       await act(async () => {
         await Promise.resolve();
       });
-      const hold = container.querySelector(".hold-button");
+      openGrownUpSheet();
+      const hold = cloudHold();
+      expect(hold).not.toBeNull();
       act(() => {
         hold!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
       });
       await act(async () => {
-        vi.advanceTimersByTime(900); // less than half the hold
+        vi.advanceTimersByTime(2400); // less than half the hold
       });
       act(() => {
         hold!.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
       });
       await act(async () => {
-        vi.advanceTimersByTime(3000);
+        vi.advanceTimersByTime(6000);
       });
       expect(window.localStorage.getItem("chiku.live.cloudEars.v1")).toBeNull();
       expect(voice.state.listenerOpts.at(-1)?.allowCloudRecognition).not.toBe(true);

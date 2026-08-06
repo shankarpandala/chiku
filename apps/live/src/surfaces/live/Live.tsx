@@ -49,13 +49,22 @@ import { createVisionEngine } from "../../vision/engine";
 import type { VisionEngine, VisionFrame, VisionStatus } from "../../vision/types";
 import { createListener, createSpeaker, isMicUnusable } from "../../voice";
 import { getCloudEars, setCloudEars } from "../../settings/cloudEars";
-import { HoldButton } from "../../components/HoldButton";
-import type { HeardResult, Listener, SpeakHandle, Speaker } from "../../voice/types";
+import { GROWNUP_OPEN_HOLD_MS, HoldButton } from "../../components/HoldButton";
+import { GrownUpSheet } from "../../components/GrownUpSheet";
+import { SunArc } from "../../components/SunArc";
+import { getLimitMinutes, SESSION_TICK_MS, SessionClock, setLimitMinutes } from "../../session/cap";
+import { warmVision } from "../../session/warmup";
+import type { HeardResult, Listener, SpeakHandle, Speaker, VoiceLang } from "../../voice/types";
 
 export type Phase = "welcome" | "camera-ask" | "playing" | "goodbye";
 export type CameraMode = "unknown" | "on" | "off";
 /** "unknown" until the platform has been asked — never flash the honest line. */
 export type MicMode = "unknown" | "ready" | "off";
+/**
+ * The camera-ask screen's own state machine. "warming" is the whole point of
+ * it: the models come down while the camera is still DARK.
+ */
+export type WarmState = "idle" | "warming" | "ready" | "failed";
 type RoundState = "prompt" | "praise";
 
 /** How long the praise stays up before the next prompt. */
@@ -64,6 +73,21 @@ const PRAISE_MS = 2200;
 const ASSIST_AFTER_MS = 8000;
 
 const PRAISES: readonly I18nKey[] = ["praise.one", "praise.two", "praise.three"];
+
+/**
+ * Capabilities the vision engine and the speaker are expected to grow but may
+ * not have yet (they belong to a change landing beside this one). Feature-
+ * detected at every call site, never assumed: this surface has to compile and
+ * behave identically with or without them.
+ */
+type MaybeWarmEngine = VisionEngine & {
+  /** A real model warm-up, if the engine ever exposes one. */
+  warm?: () => Promise<void>;
+};
+type MaybeVoicedSpeaker = Speaker & {
+  /** False when synthesis exists but has no voice for this language. */
+  hasVoice?: (lang: VoiceLang) => boolean;
+};
 
 export interface LiveProps {
   /** Test seam — defaults to the real live rig. */
@@ -87,8 +111,19 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const timersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const holdRef = useRef(new HoldTracker());
 
+  /** Cumulative PLAY time (§9.5). Paused while the tab is hidden. */
+  const clockRef = useRef(new SessionClock());
+  /** Aborts an in-flight model warm-up on unmount or on a second attempt. */
+  const warmAbortRef = useRef<AbortController | null>(null);
+
   const [phase, setPhase] = useState<Phase>("welcome");
   const [cameraMode, setCameraMode] = useState<CameraMode>("unknown");
+  const [warmState, setWarmState] = useState<WarmState>("idle");
+  /** The session ended because the cap was reached, not because it finished. */
+  const [capped, setCapped] = useState(false);
+  const [sessionProgress, setSessionProgress] = useState(0);
+  const [limitMin, setLimitMin] = useState<number>(() => getLimitMinutes());
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [status, setStatus] = useState<VisionStatus>("idle");
   const [busy, setBusy] = useState(false);
   const [attending, setAttending] = useState(false);
@@ -132,6 +167,10 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   // language on screen now, not the one that was on screen when it started.
   const langRef = useRef<Lang>(lang);
   langRef.current = lang;
+  const cappedRef = useRef(false);
+  const limitRef = useRef(limitMin);
+  limitRef.current = limitMin;
+  const warmStateRef = useRef<WarmState>("idle");
 
   const later = useCallback((fn: () => void, ms: number): void => {
     const id = globalThis.setTimeout(() => {
@@ -176,8 +215,15 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
    */
   const say = useCallback(
     (key: I18nKey, values: Values | undefined, speaking: Emote, rest: Emote): void => {
-      const speaker = speakerRef.current;
+      const speaker: MaybeVoicedSpeaker | null = speakerRef.current;
       if (!speaker?.available || listeningRef.current) return;
+      // A synthesiser with no voice INSTALLED for this language does not stay
+      // silent — it substitutes another one, and Chiku reads Telugu in an
+      // American accent. Skipping the line leaves the written text, which is
+      // the same graceful degradation a device with no synthesiser gets.
+      // Feature-detected: older speakers do not report this, and "unknown" has
+      // to mean "go ahead" or every device loses its voice.
+      if (speaker.hasVoice?.(langRef.current) === false) return;
       // One line at a time: a queue would let the praise land on top of the
       // next prompt and Chiku would be talking to himself.
       speaker.cancelAll();
@@ -252,18 +298,44 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const goGoodbye = useCallback((): void => {
     clearTimers();
     closeMic();
+    // NOTE: the clock keeps running here. The goodbye screen is still the show
+    // — "wave goodbye to Chiku" is an activity — and, more to the point, if it
+    // paused then a child who lingered on it for half an hour would earn a
+    // whole fresh twenty minutes by pressing "play again", which is the
+    // unbounded loop this cap exists to close. Only a HIDDEN tab pauses it.
     phaseRef.current = "goodbye";
     setPhase("goodbye");
     setAttending(false);
     attendingRef.current = false;
     setEmote("goodbye");
-    say("goodbye.title", undefined, "goodbye", "goodbye");
+    say(cappedRef.current ? "goodbye.capTitle" : "goodbye.title", undefined, "goodbye", "goodbye");
     // The camera light goes out the moment the game ends — visible privacy.
     engineRef.current?.stop();
     stageRef.current?.setAttention(true);
   }, [clearTimers, closeMic, say, setEmote]);
 
+  /**
+   * The cap (§9.5), reached. This ends the show — warmly, through the ordinary
+   * goodbye, with the day's-play-is-over words instead of the see-you-soon
+   * ones. Deliberately NOT a dialog, NOT a countdown, and NOT a "five more
+   * minutes?" button: an end a child can negotiate with is not an end, and the
+   * negotiating is the part that makes stopping hard.
+   */
+  const endForToday = useCallback((): void => {
+    if (phaseRef.current === "goodbye" && cappedRef.current) return;
+    cappedRef.current = true;
+    setCapped(true);
+    goGoodbye();
+  }, [goGoodbye]);
+
   const advance = useCallback((): void => {
+    // Checked between activities as well as on the tick, so a cap that fell due
+    // mid-celebration lands at the natural seam rather than cutting the
+    // celebration off.
+    if (cappedRef.current || clockRef.current.expired(limitRef.current)) {
+      endForToday();
+      return;
+    }
     const next = indexRef.current + 1;
     if (next >= roundRef.current.length) {
       goGoodbye();
@@ -272,7 +344,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     indexRef.current = next;
     setIndex(next);
     beginPrompt();
-  }, [beginPrompt, goGoodbye]);
+  }, [beginPrompt, endForToday, goGoodbye]);
 
   const succeed = useCallback((): void => {
     if (roundStateRef.current !== "prompt" || phaseRef.current !== "playing") return;
@@ -296,6 +368,10 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
 
   const startPlaying = useCallback((): void => {
     clearTimers();
+    // Idempotent: the first prompt of the visit starts the clock, every later
+    // one resumes it if a hidden tab paused it.
+    clockRef.current.start();
+    setSessionProgress(clockRef.current.progress(limitRef.current));
     const next = buildRound(random);
     roundRef.current = next;
     setRound(next);
@@ -374,30 +450,6 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
 
   const heardHandlerRef = useRef(handleHeard);
   heardHandlerRef.current = handleHeard;
-
-  /** Hold began: Chiku stops talking and opens the mic, in that order. */
-  /**
-   * Probe once, at mount, whether speech can be recognised WITHOUT leaving the
-   * device. Chrome defaults to server-side recognition, which would break §9.1
-   * silently, so a mic we cannot keep local is a mic we do not offer.
-   */
-  useEffect(() => {
-    const listener = listenerRef.current;
-    if (!listener?.available) return;
-    let alive = true;
-    void listener.ensureOnDevice(langRef.current).then((allowed) => {
-      if (!alive) return;
-      micAllowedRef.current = allowed;
-      // ensureOnDevice answers true when recognition is local, OR when a
-      // grown-up deliberately accepted cloud ears (the listener was built with
-      // that flag). False means neither — the mic stays shut and says so.
-      if (!allowed) setMicMode("off");
-      else setMicMode("ready");
-    });
-    return () => {
-      alive = false;
-    };
-  }, [phase, cloudEars]);
 
   const openMic = useCallback((): void => {
     const listener = listenerRef.current;
@@ -498,6 +550,30 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     micAllowedRef.current = null; // unknown again until the probe answers
     setMicMode(listener.available ? "ready" : "off");
 
+    /**
+     * Probe whether speech can be recognised WITHOUT leaving the device.
+     * Chrome defaults to server-side recognition, which would break §9.1
+     * silently, so a mic we cannot keep local is a mic we do not offer.
+     *
+     * This used to be its own effect keyed on `phase`, which meant it did not
+     * run until the child left the welcome screen — the listener does not
+     * exist yet on the pass where that effect first fires. The consequence was
+     * that a grown-up opening the settings sheet before play started saw no
+     * cloud-ears offer at all on a platform that has no local speech. It
+     * belongs here, where the listener it probes is created.
+     */
+    let probeAlive = true;
+    if (listener.available) {
+      void listener.ensureOnDevice(langRef.current).then((allowed) => {
+        if (!probeAlive || !mountedRef.current) return;
+        micAllowedRef.current = allowed;
+        // True when recognition is local, OR when a grown-up deliberately
+        // accepted cloud ears (the listener was built with that flag). False
+        // means neither — the mic stays shut and the surface says so.
+        setMicMode(allowed ? "ready" : "off");
+      });
+    }
+
     const offResult = listener.onResult((result) => {
       if (!mountedRef.current) return;
       heardHandlerRef.current(result);
@@ -525,6 +601,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     }
 
     return () => {
+      probeAlive = false;
       offResult();
       offError();
       offEnd();
@@ -553,6 +630,10 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   }, [say, setEmote]);
 
   const playWithoutCamera = useCallback((): void => {
+    // Abandon any warm-up in flight: this child is not using the camera today
+    // and does not owe the network 20MB for it.
+    warmAbortRef.current?.abort();
+    warmAbortRef.current = null;
     cameraModeRef.current = "off";
     setCameraMode("off");
     startPlaying();
@@ -585,7 +666,61 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     if (mountedRef.current) startPlaying();
   }, [playWithoutCamera, startPlaying]);
 
+  /**
+   * MODELS FIRST, CAMERA SECOND.
+   *
+   * The engine used to take the camera and *then* pull ~20MB of WASM and model
+   * bundles. On a mid-range Indian 4G connection that is a minute or more of a
+   * lit camera light above an empty preview, with only a button label to say
+   * anything is happening — which is precisely the trust the camera promise on
+   * this screen is trying to buy, spent. And when the fetch failed there was no
+   * way back at all except reloading the page.
+   *
+   * So this warms the bytes with the camera DARK, shows Chiku thinking while it
+   * happens, and only then calls openEyes(). A failure lands on a retry, and
+   * "play without the camera" stays live throughout — including during the
+   * warm-up, which is the moment a bored child most needs it.
+   */
+  const warmThenOpenEyes = useCallback(async (): Promise<void> => {
+    if (warmStateRef.current === "warming") return;
+    warmAbortRef.current?.abort();
+    const controller = new AbortController();
+    warmAbortRef.current = controller;
+
+    warmStateRef.current = "warming";
+    setWarmState("warming");
+    setEmote("thinking");
+    say("warm.title", undefined, "thinking", "thinking");
+
+    const engine: MaybeWarmEngine | null = engineRef.current;
+    try {
+      // Prefer a real engine warm-up if one has landed; otherwise pull the same
+      // URLs through fetch so the engine's own load resolves from cache.
+      if (typeof engine?.warm === "function") await engine.warm();
+      else await warmVision({ signal: controller.signal });
+    } catch {
+      if (!mountedRef.current || controller.signal.aborted) return;
+      warmStateRef.current = "failed";
+      setWarmState("failed");
+      setEmote("encouraging");
+      say("warm.failed", undefined, "encouraging", "encouraging");
+      return;
+    }
+    if (!mountedRef.current || controller.signal.aborted) return;
+    warmAbortRef.current = null;
+    warmStateRef.current = "ready";
+    setWarmState("ready");
+    await openEyes();
+  }, [openEyes, say, setEmote]);
+
   const playAgain = useCallback(async (): Promise<void> => {
+    // The cap outranks the button. Reaching this with an expired clock means
+    // the clock ran out while the child sat on the goodbye screen; ending for
+    // today is the honest answer, and the button disappears with it.
+    if (cappedRef.current || clockRef.current.expired(limitRef.current)) {
+      endForToday();
+      return;
+    }
     setStreak(0);
     if (cameraModeRef.current === "on") {
       const engine = engineRef.current;
@@ -603,7 +738,69 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       }
     }
     if (mountedRef.current) startPlaying();
-  }, [startPlaying]);
+  }, [endForToday, startPlaying]);
+
+  // --- the session cap, on a clock -----------------------------------------
+
+  /**
+   * One coarse tick while playing: it advances the sun-to-moon arc and it is
+   * what actually enforces §9.5. Five seconds is deliberate — the arc moves
+   * about half a degree per tick at a 20-minute cap, so it reads as information
+   * rather than as a countdown ticking down at a child.
+   *
+   * The cap is not applied mid-celebration: if it falls due during praise the
+   * flag is set and `advance()` carries us out a moment later, so the last
+   * thing that happens is still "Yes! You did it!" and not a screen change.
+   */
+  useEffect(() => {
+    if (phase !== "playing") return;
+    const clock = clockRef.current;
+    const tick = (): void => {
+      if (!mountedRef.current) return;
+      setSessionProgress(clock.progress(limitRef.current));
+      if (!clock.expired(limitRef.current)) return;
+      cappedRef.current = true;
+      if (roundStateRef.current !== "praise") endForToday();
+    };
+    tick();
+    const id = globalThis.setInterval(tick, SESSION_TICK_MS);
+    return () => globalThis.clearInterval(id);
+  }, [endForToday, limitMin, phase]);
+
+  /**
+   * A backgrounded tab is not play time. Ten minutes of a parent's phone call
+   * must not spend the child's twenty.
+   *
+   * THE CAMERA AND THE MICROPHONE ARE NOT THIS EFFECT'S BUSINESS. The engine
+   * wires its own `visibilitychange` (it owns the stream, so it is the only
+   * thing that can honestly release it) and so does the listener. Duplicating
+   * that here would mean two owners for one piece of hardware. `suspend()` and
+   * `resume()` are still feature-detected and called for the paused-by-us
+   * case only — Chiku's VOICE, which nothing else watches, is silenced here.
+   */
+  useEffect(() => {
+    const onVisibility = (): void => {
+      if (document.visibilityState === "hidden") {
+        clockRef.current.pause();
+        // Speech synthesis keeps talking to an empty room otherwise.
+        hush();
+        closeMic();
+        return;
+      }
+      if (phaseRef.current === "playing") clockRef.current.start();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [closeMic, hush]);
+
+  /** Abort a warm-up that outlives the surface. */
+  useEffect(
+    () => () => {
+      warmAbortRef.current?.abort();
+      warmAbortRef.current = null;
+    },
+    [],
+  );
 
   const pickChoice = useCallback(
     (choice: ActivityChoice): void => {
@@ -659,7 +856,56 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
           </>
         )}
 
-        {phase === "camera-ask" && (
+        {phase === "camera-ask" && warmState === "warming" && (
+          /* The camera is DARK for the whole of this screen. That is the entire
+             point of it, and the kid line says so out loud so a grown-up
+             walking past can check the promise against the hardware. No
+             percentage and no spinner: a number a child cannot read is stress,
+             and on a stalled connection a stuck number is worse than none. */
+          <>
+            <h1 className="live-greeting">
+              <Bilingual k="warm.title" />
+            </h1>
+            <p className="live-kidline">
+              <Bilingual k="warm.kidLine" />
+            </p>
+            <p className="warm-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </p>
+            {/* Never disabled. A child who has waited long enough must always
+                be able to leave for the game that needs no download. */}
+            <button type="button" className="live-quiet" onClick={playWithoutCamera}>
+              <Bilingual k="camera.skip" inline />
+            </button>
+            <p className="live-promise">
+              <Bilingual k="warm.grownup" />
+            </p>
+          </>
+        )}
+
+        {phase === "camera-ask" && warmState === "failed" && (
+          /* A failed download used to be a dead end whose only exit was
+             reloading the page. Now it is two doors, and both of them work. */
+          <>
+            <h1 className="live-greeting">
+              <Bilingual k="warm.failedTitle" />
+            </h1>
+            <p className="live-kidline">
+              <Bilingual k="warm.failed" />
+            </p>
+            <BigButton k="warm.retry" onClick={() => void warmThenOpenEyes()} />
+            <button type="button" className="live-quiet" onClick={playWithoutCamera}>
+              <Bilingual k="camera.skip" inline />
+            </button>
+            <p className="live-promise">
+              <Bilingual k="warm.failedGrownup" />
+            </p>
+          </>
+        )}
+
+        {phase === "camera-ask" && warmState !== "warming" && warmState !== "failed" && (
           <>
             <h1 className="live-greeting">
               <Bilingual k="camera.title" />
@@ -667,7 +913,11 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
             <p className="live-kidline">
               <Bilingual k="camera.kidLine" />
             </p>
-            <BigButton k={busy ? "camera.loading" : "camera.allow"} onClick={() => void openEyes()} disabled={busy} />
+            <BigButton
+              k={busy ? "camera.loading" : "camera.allow"}
+              onClick={() => void warmThenOpenEyes()}
+              disabled={busy}
+            />
             <button type="button" className="live-quiet" onClick={playWithoutCamera} disabled={busy}>
               <Bilingual k="camera.skip" inline />
             </button>
@@ -675,26 +925,10 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
             <p className="live-promise">
               <Bilingual k="camera.promise" />
             </p>
-
-            {/* Cloud ears — a grown-up decision, so it hides behind a hold.
-                Shown only when the platform has no local speech (micMode "off"
-                after the probe) or when it is already on and can be revoked.
-                The words are the point: honest about where the audio goes. */}
-            {(micMode === "off" || cloudEars) && (
-              <div className="cloud-ears">
-                <p className="live-promise">
-                  <Bilingual k={cloudEars ? "cloud.explainOn" : "cloud.explainOff"} />
-                </p>
-                <HoldButton
-                  label={`${tIn(lang, cloudEars ? "cloud.holdOff" : "cloud.holdOn")} · ${tIn(other, cloudEars ? "cloud.holdOff" : "cloud.holdOn")}`}
-                  onHeld={() => {
-                    const next = !cloudEars;
-                    setCloudEars(next);
-                    setCloudEarsState(next);
-                  }}
-                />
-              </div>
-            )}
+            {/* The cloud-ears consent is NOT here any more. It used to be — on
+                the one screen the child is alone on every session, behind a 2s
+                hold a six-year-old beats. It now lives in the grown-up sheet
+                behind the corner control and a 5s hold. */}
           </>
         )}
 
@@ -761,23 +995,67 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
                 )}
               </>
             )}
-            <StreakStars count={streak} total={round.length} />
+            <div className="live-footer">
+              <StreakStars count={streak} total={round.length} />
+              {/* Sun to moon: where we are in today's play time, readable at a
+                  glance by someone who cannot read a clock. */}
+              <SunArc progress={sessionProgress} label={tIn(lang, "session.arcLabel")} />
+            </div>
           </>
         )}
 
         {phase === "goodbye" && (
           <>
             <h1 className="live-greeting">
-              <Bilingual k="goodbye.title" />
+              <Bilingual k={capped ? "goodbye.capTitle" : "goodbye.title"} />
             </h1>
             <p className="live-kidline">
-              <Bilingual k="goodbye.wave" inline />
+              <Bilingual k={capped ? "goodbye.capLine" : "goodbye.wave"} inline />
             </p>
             <StreakStars count={streak} total={round.length} />
-            <BigButton k="goodbye.again" onClick={() => void playAgain()} />
+            {/* Past the cap the button is GONE, not disabled and not replaced
+                with a "just five more minutes?" prompt (§9.5). A control that
+                refuses is something to push against; an absent one is just the
+                end of the show. */}
+            {!capped && <BigButton k="goodbye.again" onClick={() => void playAgain()} />}
           </>
         )}
       </section>
+
+      {/* --- the grown-up door ---------------------------------------------
+          Small, cornered, and gated by patience rather than by a secret. It is
+          the only route to the cloud-recognition consent and the session cap,
+          both of which are decisions a child must not be able to make while
+          alone with the device — which is every session. */}
+      <div className="grownup-corner">
+        <HoldButton
+          className="hold-corner"
+          holdMs={GROWNUP_OPEN_HOLD_MS}
+          label={`${tIn(lang, "grownup.open")} · ${tIn(other, "grownup.open")}`}
+          onHeld={() => setSheetOpen(true)}
+        />
+      </div>
+
+      {sheetOpen && (
+        <GrownUpSheet
+          onClose={() => setSheetOpen(false)}
+          cloudEars={cloudEars}
+          /* Only offered where it buys something: a browser with local speech
+             already has ears, and nobody should be talked into sending a
+             child's voice away for a capability they already have. */
+          showCloudEars={micMode === "off" || cloudEars}
+          onToggleCloudEars={() => {
+            const next = !cloudEars;
+            setCloudEars(next);
+            setCloudEarsState(next);
+          }}
+          limitMin={limitMin}
+          onLimitChange={(next) => {
+            setLimitMinutes(next);
+            setLimitMin(getLimitMinutes());
+          }}
+        />
+      )}
     </main>
   );
 }

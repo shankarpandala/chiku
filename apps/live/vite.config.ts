@@ -19,8 +19,11 @@ function csp(isDev: boolean): Plugin {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data:",
     "media-src 'self' blob:",
+    // 'self' also authorises the service worker in public/sw.js. It is
+    // same-origin and hand-written; nothing here loosens that.
     "worker-src 'self' blob:",
     "font-src 'self'",
+    "manifest-src 'self'",
     isDev
       ? "connect-src 'self' blob: data: ws://localhost:* http://localhost:*"
       : "connect-src 'self' blob: data:",
