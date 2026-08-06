@@ -77,6 +77,22 @@ export class HoldTracker {
   private misses = 0;
   /** Consecutive no-evidence frames since the last match. */
   private blanks = 0;
+  /**
+   * Extra frames of dropout forgiven on top of both budgets, handed down by
+   * the assist ladder (see `activities/assist.ts`). Zero is the shipped
+   * behaviour; a child who has needed help twice gets a wider net without ever
+   * being told the net moved.
+   *
+   * Deliberately NOT cleared by `reset()`: reset happens between attempts
+   * inside one prompt, and forgiveness the child has earned must survive that.
+   * The runner clears it explicitly when a new prompt begins.
+   */
+  private extraSlack = 0;
+
+  /** Widen both dropout budgets. Idempotent; call with 0 to go back to strict. */
+  relax(extraFrames: number): void {
+    this.extraSlack = Number.isFinite(extraFrames) ? Math.max(0, Math.floor(extraFrames)) : 0;
+  }
 
   /**
    * Feed one frame's verdict; returns true exactly once, when the hold
@@ -102,7 +118,7 @@ export class HoldTracker {
         // proves nothing, and it cannot die on one either.
         if (this.startedAt === null) return false;
         this.blanks += 1;
-        if (this.blanks > HOLD_UNKNOWN_FRAMES) this.reset();
+        if (this.blanks > HOLD_UNKNOWN_FRAMES + this.extraSlack) this.reset();
         return false;
       }
 
@@ -110,7 +126,9 @@ export class HoldTracker {
         if (this.startedAt === null) return false;
         this.misses += 1;
         const ceilingMs = Math.max(holdMs, HOLD_SLACK_CEILING_MS);
-        if (this.misses > HOLD_SLACK_FRAMES || t - this.lastMatchAt > ceilingMs) this.reset();
+        if (this.misses > HOLD_SLACK_FRAMES + this.extraSlack || t - this.lastMatchAt > ceilingMs) {
+          this.reset();
+        }
         return false;
       }
     }

@@ -56,6 +56,7 @@ const vision = vi.hoisted(() => {
       for (const cb of [...statusCbs]) cb("ready");
     },
     stop() {},
+    setCalibration() {},
     onFrame(cb) {
       frameCbs.add(cb);
       return () => {

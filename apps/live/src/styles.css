@@ -161,6 +161,73 @@ body {
   background: var(--kid-teal);
 }
 
+/* --- the hold cue --------------------------------------------------------
+   A marigold arc INSIDE the frame, filling clockwise from 12 o'clock while the
+   child holds the pose. It is deliberately a different object from the teal
+   attention glow, which is a box-shadow OUTSIDE the same frame:
+
+     teal, outside   → "Chiku can see you"        (§9 reserves teal for this)
+     marigold, inside → "Chiku is counting you in" (marigold is the action colour)
+
+   Concentric but never confusable — different colour, different side of the
+   edge, and the marigold one is only ever on screen while a hold is running.
+
+   Built from a conic mask on a border rather than an SVG stroke so the arc
+   inherits the stage's real corner radius instead of approximating it. */
+
+.hold-ring {
+  position: absolute;
+  inset: 10px;
+  pointer-events: none;
+}
+
+.hold-ring-track,
+.hold-ring-fill {
+  position: absolute;
+  inset: 0;
+  /* The frame's 36px, less the 10px inset — concentric with the stage edge. */
+  border-radius: 26px;
+  border: 10px solid transparent;
+}
+
+/* A faint whole ring, so "how much further" is legible and not just "some". */
+.hold-ring-track {
+  border-color: color-mix(in srgb, var(--kid-sand) 72%, transparent);
+}
+
+.hold-ring-fill {
+  border-color: var(--kid-marigold);
+  -webkit-mask-image: conic-gradient(#000 calc(var(--hold-progress, 0) * 1turn), transparent 0);
+  mask-image: conic-gradient(#000 calc(var(--hold-progress, 0) * 1turn), transparent 0);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--kid-marigold) 55%, transparent));
+  /* Unhurried, and only a breath — a spin here would turn counting into
+     waiting, which is the one thing this cue must not say. */
+  animation: hold-breathe 1600ms ease-in-out infinite;
+}
+
+/* The tracker blinked. The ring keeps its length and softens instead of
+   emptying: the child did not undo anything, so nothing may be taken away. */
+.hold-ring.is-holding .hold-ring-fill {
+  opacity: 0.7;
+  animation: none;
+}
+
+.hold-ring.is-static .hold-ring-fill {
+  animation: none;
+  filter: none;
+  opacity: 1;
+}
+
+@keyframes hold-breathe {
+  0%,
+  100% {
+    opacity: 0.88;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 /* --- copy ---------------------------------------------------------------- */
 
 /* Both scripts, always. Primary loud, other quieter but never hidden. */
@@ -416,6 +483,13 @@ body {
     border-radius: 28px;
   }
 
+  /* Follows the frame's smaller radius, still inset by the same 10px. */
+  .hold-ring-track,
+  .hold-ring-fill {
+    border-radius: 18px;
+    border-width: 8px;
+  }
+
   .panel {
     flex: 1 1 auto;
     max-width: min(52vw, 560px);
@@ -483,6 +557,15 @@ body {
   .big-btn:active:not(:disabled),
   .choice:active {
     transform: none;
+  }
+
+  /* The hold cue keeps its meaning without any movement: a static filled
+     proportion, no breath and no glow. The component stops its ease-down loop
+     for the same reason (see HoldRing) — the number on screen is still true. */
+  .hold-ring-fill {
+    animation: none;
+    filter: none;
+    opacity: 1;
   }
 }
 

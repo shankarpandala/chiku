@@ -539,6 +539,13 @@ class OnDeviceVisionEngine implements LifecycleVisionEngine {
   #face: FaceTask | null = null;
   #hands: HandTask | null = null;
   #calibration: VisionCalibration;
+  /**
+   * Somebody called `setCalibration`, so `start()` must stop re-reading the
+   * stored per-child pass over the top of it. Without this a rung set while the
+   * camera was closed would be silently thrown away the moment it opened —
+   * which is the "easier" rung quietly not existing, again.
+   */
+  #calibrationOverridden = false;
 
   #video: HTMLVideoElement | null = null;
   #stream: MediaStream | null = null;
@@ -601,6 +608,21 @@ class OnDeviceVisionEngine implements LifecycleVisionEngine {
     return this.#suspended;
   }
 
+  /**
+   * Swap the finger thresholds mid-round. See `VisionEngine.setCalibration`.
+   *
+   * Just a field write: `#infer` reads `#calibration` fresh on every frame, so
+   * the change lands on the NEXT frame with no camera restart and no model
+   * reload — the child sees and hears nothing happen. Legal in every state,
+   * including before `start()`, after `stop()`, while suspended, and after
+   * `dispose()`, because the assist ladder changes rung on its own schedule and
+   * has no business knowing whether the camera is open at that instant.
+   */
+  setCalibration(next: VisionCalibration): void {
+    this.#calibration = next;
+    this.#calibrationOverridden = true;
+  }
+
   onFrame(cb: (frame: VisionFrame) => void): () => void {
     this.#frameListeners.add(cb);
     return () => {
@@ -642,7 +664,10 @@ class OnDeviceVisionEngine implements LifecycleVisionEngine {
     this.#setStatus("loading");
 
     // Re-read calibration on each start: the parent may have just run a pass.
-    if (this.#fixedCalibration === undefined) this.#calibration = getCalibration();
+    // Unless the surface has set one explicitly — see `setCalibration`.
+    if (this.#fixedCalibration === undefined && !this.#calibrationOverridden) {
+      this.#calibration = getCalibration();
+    }
 
     const devices = this.#camera;
     if (!devices || typeof devices.getUserMedia !== "function") {

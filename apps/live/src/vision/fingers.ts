@@ -144,6 +144,45 @@ export const ADULT_THRESHOLDS: FingerThresholds = Object.freeze({
   maxAmbiguousFingers: MAX_AMBIGUOUS_FINGERS,
 });
 
+/**
+ * Floor for a relaxed angle threshold. Matches `CALIBRATION_BOUNDS` in
+ * `calibration.ts`: below about 90deg a "finger" is a right angle, and calling
+ * that extended would make Chiku congratulate a fist.
+ */
+export const MIN_ANGLE_THRESHOLD_DEG = 90;
+
+/**
+ * Meet a wobbly hand halfway.
+ *
+ * The assist ladder hands down a number of degrees (see `relaxFor` in
+ * `activities/assist.ts`) after a child has missed twice, and this is where
+ * that number becomes a detector change: both angle thresholds come down, so a
+ * finger a small hand cannot straighten past 140deg starts counting, and one
+ * more finger is allowed to sit inside the ambiguity band before the whole
+ * hand is written off as unscoreable — the "I couldn't tell" that a struggling
+ * child hits most often and that costs them the most.
+ *
+ * It is a relaxation, not a surrender: the bands narrow toward each other, they
+ * do not disappear, and the child is never told any of this happened. Being
+ * visibly handed an easier version is a small humiliation, and they did not
+ * ask for one.
+ *
+ * Pure, and the identity when `angleRelaxDeg` is zero or nonsense — so the
+ * "none" and "watch" rungs are provably the shipped detector.
+ */
+export function relaxThresholds(
+  base: FingerThresholds,
+  angleRelaxDeg: number,
+): FingerThresholds {
+  if (!Number.isFinite(angleRelaxDeg) || angleRelaxDeg <= 0) return base;
+  return {
+    fingerAngleDeg: Math.max(MIN_ANGLE_THRESHOLD_DEG, base.fingerAngleDeg - angleRelaxDeg),
+    thumbAngleDeg: Math.max(MIN_ANGLE_THRESHOLD_DEG, base.thumbAngleDeg - angleRelaxDeg),
+    ambiguityBandDeg: base.ambiguityBandDeg,
+    maxAmbiguousFingers: Math.min(5, base.maxAmbiguousFingers + 1),
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Result                                                                     */
 /* -------------------------------------------------------------------------- */
