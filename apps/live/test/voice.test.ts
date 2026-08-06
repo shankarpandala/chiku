@@ -32,6 +32,7 @@ import {
   type RecognitionErrorLike,
   type RecognitionEventLike,
   type RecognitionLike,
+  withProbeTimeout,
 } from "../src/voice/listener";
 import { BOUNDARY_DIP_MS, JAW_MAX, JAW_MIN, jawAt } from "../src/voice/mouth";
 import type { HeardResult } from "../src/voice/types";
@@ -902,5 +903,24 @@ describe("listener: on-device is a gate, not a footnote", () => {
       },
     });
     expect(await listener.ensureOnDevice("en")).toBe(false);
+  });
+});
+
+describe("listener: the on-device probe cannot hang the surface", () => {
+  it("resolves to 'timeout' when the platform probe never answers", async () => {
+    vi.useFakeTimers();
+    try {
+      const hang = new Promise<string>(() => undefined);
+      const guarded = withProbeTimeout(hang, 3000);
+      await vi.advanceTimersByTimeAsync(3100);
+      await expect(guarded).resolves.toBe("timeout");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("passes a real answer straight through", async () => {
+    await expect(withProbeTimeout(Promise.resolve("available"), 3000)).resolves.toBe("available");
+    await expect(withProbeTimeout(Promise.resolve("unavailable"), 3000)).resolves.toBe("unavailable");
   });
 });

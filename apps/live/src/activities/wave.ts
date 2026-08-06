@@ -46,6 +46,10 @@ export const createWaveActivity: ActivityFactory = (random) => {
     tapHintKey: "act.wave.tap",
     holdMs: WAVE_HOLD_MS,
     matches: (frame) => frame.waving,
+    // No hands in frame is no evidence about waving — the detector cannot tell
+    // "stopped waving" from "lost the hand for a frame", and only one of those
+    // is the child's fault.
+    hasEvidence: (frame) => frame.hands.length > 0,
     choices: flip ? [STILL, WAVING] : [WAVING, STILL],
     answers: WAVE_ANSWERS,
     accepts: (utterance) => matchesAnswer(utterance, WAVE_ANSWERS),

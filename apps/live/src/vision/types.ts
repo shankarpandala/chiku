@@ -35,12 +35,35 @@ export interface HandSignal {
 export interface VisionFrame {
   /** Milliseconds, from the vision clock. */
   t: number;
+  /**
+   * The PRIMARY person's face, or null when the tracker did not find them this
+   * frame. Which person that is stays locked across frames — a sibling walking
+   * through does not become "the child". Still nulls out on a single dropped
+   * frame: `facePresence` is the forgiving version of this signal.
+   */
   face: FaceSignal | null;
+  /** Every hand seen this frame, primary person's or not. */
   hands: readonly HandSignal[];
-  /** Total extended fingers across all visible hands, or null if none scoreable. */
+  /**
+   * Total extended fingers across the PRIMARY person's hands — both of theirs,
+   * and nobody else's — or null if none scoreable. A parent's resting hand in
+   * frame must not add to the count, and a sibling's 2 plus the child's 1 must
+   * not read as "three".
+   */
   totalFingers: number | null;
-  /** True while a wave is in progress (wrist oscillation + open palm). */
+  /** True while the PRIMARY person is waving (wrist oscillation + open palm). */
   waving: boolean;
+  /**
+   * How strongly we believe the primary person's face is there, 0..1. Rises
+   * fast, decays slowly, and holds flat through a ~25-frame tracker dropout, so
+   * unlike `face` it does not read as "gone" the moment the tracker blinks.
+   *
+   * Optional only so existing frame literals keep compiling; the engine always
+   * sets it. Prefer this over `face !== null` for anything a child can see
+   * change — a state flip they cannot perceive as caused by them reads as
+   * random.
+   */
+  facePresence?: number;
 }
 
 export type VisionStatus =

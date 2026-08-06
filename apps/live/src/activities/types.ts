@@ -4,8 +4,13 @@
 //   prompt → the child does a thing → Chiku reacts → praise.
 //
 // Four rules baked into the shape:
-//   1. `matches` is a PURE predicate over one VisionFrame. All debouncing lives
-//      in the runner (children's hands wobble; a single frame is never truth).
+//   1. `matches` is a predicate over one VisionFrame, and it is paired with
+//      `hasEvidence`, which says whether the frame could answer the question at
+//      all. All debouncing lives in the runner (children's hands wobble; a
+//      single frame is never truth). `matches` is pure for fingers and wave;
+//      smile carries its own enter/exit gate, because a threshold crossing —
+//      unlike a finger count — has no natural quantum and would otherwise
+//      chatter at the boundary. That gate is the only state in this file.
 //   2. Every activity carries `choices` — a tap answer that works with no
 //      camera at all. There is no vision-only activity.
 //   3. Every activity carries `answers` — a SPOKEN answer, in both languages,
@@ -13,6 +18,7 @@
 //   4. There is retry copy, but no failure copy. Rounds end in praise.
 
 import type { VisionFrame } from "../vision/types";
+import type { HoldVerdict } from "./hold";
 import type { I18nKey, Values } from "../i18n";
 
 export type ActivityKind = "fingers" | "wave" | "smile";
@@ -85,6 +91,16 @@ export interface Activity {
   /** How long `matches` must hold before it counts. Anti-wobble, not a gate. */
   readonly holdMs: number;
   matches(frame: VisionFrame): boolean;
+  /**
+   * Could this frame answer the question at all?
+   *
+   * False means "no evidence", not "wrong": the hand was too ambiguous to
+   * count, or the face detector found nobody. The runner turns that into a
+   * `HoldVerdict` of "unknown", which neither advances the hold nor resets it.
+   * Without this every honest "I couldn't tell" was scored as a wrong answer
+   * and spent the child's slack — the tracker's uncertainty punishing them.
+   */
+  hasEvidence(frame: VisionFrame): boolean;
   readonly choices: readonly ActivityChoice[];
   /** What the right answer sounds like, in te and en. */
   readonly answers: SpokenAnswers;
@@ -97,6 +113,15 @@ export interface Activity {
 }
 
 export type ActivityFactory = (random: () => number) => Activity;
+
+/**
+ * One frame, one verdict — the only place `matches` and `hasEvidence` are
+ * combined, so no caller can accidentally score "I couldn't tell" as "wrong".
+ */
+export function verdictFor(activity: Activity, frame: VisionFrame): HoldVerdict {
+  if (!activity.hasEvidence(frame)) return "unknown";
+  return activity.matches(frame) ? "match" : "mismatch";
+}
 
 /** Uniform integer in [min, max]; safe against random() returning exactly 1. */
 export function randInt(random: () => number, min: number, max: number): number {

@@ -57,6 +57,10 @@ export const createFingersActivity: ActivityFactory = (random) => {
     tapHintKey: "act.fingers.tap",
     holdMs: FINGERS_HOLD_MS,
     matches: (frame) => frame.totalFingers === target,
+    // null is "the hand was too ambiguous to count", which is the single most
+    // common frame during the wobble between two counts — and it used to reset
+    // the hold. It is not a wrong answer; it is no answer.
+    hasEvidence: (frame) => frame.totalFingers !== null,
     choices,
     answers,
     accepts: (utterance) => matchesAnswer(utterance, answers),

@@ -159,6 +159,32 @@ export interface ListenerOptions {
   readonly allowCloudRecognition?: boolean;
 }
 
+/** A probe that has not answered by now is treated as "no local speech". */
+export const ON_DEVICE_PROBE_TIMEOUT_MS = 3000;
+
+/**
+ * Observed on real Chrome 151/macOS: `SpeechRecognition.available()` can hang
+ * forever instead of resolving. Unguarded, the surface sits at micMode
+ * "unknown" for the whole session — no talk button AND no honest note, just
+ * nothing. A probe that does not answer promptly means "no local speech".
+ */
+export async function withProbeTimeout(
+  probe: Promise<string>,
+  timeoutMs: number = ON_DEVICE_PROBE_TIMEOUT_MS,
+): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      probe,
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 /** Chrome 139+ on-device availability probe. Unknown engines answer "no". */
 function browserOnDeviceCheck(): (lang: VoiceLang) => Promise<boolean> {
   return async (lang: VoiceLang): Promise<boolean> => {
@@ -170,7 +196,9 @@ function browserOnDeviceCheck(): (lang: VoiceLang) => Promise<boolean> {
     const probe = g.SpeechRecognition?.available;
     if (typeof probe !== "function") return false;
     try {
-      const state = await probe({ langs: [LISTEN_LANG_TAG[lang]], processLocally: true });
+      const state = await withProbeTimeout(
+        probe({ langs: [LISTEN_LANG_TAG[lang]], processLocally: true }),
+      );
       // "available" — ready now. "downloadable"/"downloading" — the model is not
       // on the device yet, so opening the mic now would fall back to the cloud.
       return state === "available";
