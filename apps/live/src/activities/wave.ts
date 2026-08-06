@@ -4,9 +4,24 @@
 // `frame.waving` is itself an oscillation detector, so it is already smoothed;
 // a short hold is enough to keep a stray true from firing.
 
-import type { Activity, ActivityChoice, ActivityFactory } from "./types";
+import {
+  matchesAnswer,
+  type Activity,
+  type ActivityChoice,
+  type ActivityFactory,
+  type SpokenAnswers,
+} from "./types";
 
 export const WAVE_HOLD_MS = 300;
+
+/**
+ * Waving is a greeting, so the spoken answer is the greeting itself — a child
+ * asked to wave says "hi!" or "టాటా!", not "I am waving". Accept the greeting.
+ */
+const WAVE_ANSWERS: SpokenAnswers = {
+  te: ["టాటా", "టా టా", "హాయ్", "నమస్తే", "tata", "taata", "ta ta", "haay", "namaste", "namaskaram"],
+  en: ["hi", "hii", "hey", "hello", "bye", "bye bye", "byebye", "wave", "waving", "i am waving"],
+};
 
 const WAVING: ActivityChoice = {
   id: "wave-waving",
@@ -32,6 +47,8 @@ export const createWaveActivity: ActivityFactory = (random) => {
     holdMs: WAVE_HOLD_MS,
     matches: (frame) => frame.waving,
     choices: flip ? [STILL, WAVING] : [WAVING, STILL],
+    answers: WAVE_ANSWERS,
+    accepts: (utterance) => matchesAnswer(utterance, WAVE_ANSWERS),
   };
   return activity;
 };

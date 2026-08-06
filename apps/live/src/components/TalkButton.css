@@ -1,0 +1,110 @@
+/* The hold-to-talk control.
+ *
+ * TEAL IS LOAD-BEARING. Across this app teal means exactly one thing —
+ * "Chiku is attending to you" (§9) — so this button is sand while it is merely
+ * offered and teal only while the microphone is genuinely open. A child who
+ * has learnt the teal stage ring already knows what the teal button means, and
+ * a grown-up glancing across the room can tell whether the mic is live from
+ * the colour alone. Nothing else here may borrow the colour.
+ *
+ * Lives beside its component rather than in styles.css because it is the only
+ * object in the surface with a live/idle duality of its own.
+ */
+
+.talk-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  /* Held with a whole hand, not a fingertip — well past the 64px floor. */
+  min-height: 104px;
+  min-width: min(88vw, 340px);
+  padding: 14px 30px;
+  border-radius: 30px;
+
+  font-family: var(--font-kid);
+  font-size: clamp(17px, 2.6vmin, 23px);
+  font-weight: 700;
+  color: var(--kid-ink);
+
+  background: var(--kid-sand);
+  border: 3px solid #e7dcc8;
+  box-shadow: 0 5px 0 #e2d3b6;
+  cursor: pointer;
+
+  /* A hold gesture must not scroll the page out from under the child. */
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* THE MIC IS OPEN. Only state allowed to wear teal. */
+.talk-btn.is-listening {
+  color: var(--kid-cream);
+  background: var(--kid-teal);
+  border-color: var(--kid-teal);
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--kid-teal) 34%, transparent),
+    0 5px 0 color-mix(in srgb, var(--kid-teal) 70%, #2c2a35);
+  transform: translateY(3px);
+}
+
+.talk-btn-mic {
+  width: 34px;
+  height: 34px;
+  fill: currentcolor;
+}
+
+/* Three bars that swell while the mic is open — motion, not a new colour, is
+   the second channel, so the state never rests on colour alone. */
+.talk-btn-wave {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 14px;
+}
+
+.talk-btn-wave i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: currentcolor;
+  opacity: 0.45;
+}
+
+.talk-btn.is-listening .talk-btn-wave i {
+  opacity: 1;
+  animation: talk-pulse 900ms ease-in-out infinite;
+}
+
+.talk-btn.is-listening .talk-btn-wave i:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.talk-btn.is-listening .talk-btn-wave i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@keyframes talk-pulse {
+  0%,
+  100% {
+    height: 5px;
+  }
+  50% {
+    height: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .talk-btn.is-listening {
+    transform: none;
+  }
+
+  .talk-btn.is-listening .talk-btn-wave i {
+    height: 14px;
+    animation: none;
+  }
+}

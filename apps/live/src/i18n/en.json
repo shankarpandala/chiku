@@ -28,6 +28,10 @@
   "act.smile.retry": "An even bigger smile! Chiku will smile back.",
   "act.smile.tap": "Or tap the happy face",
 
+  "talk.hold": "Hold this and tell Chiku",
+  "talk.listening": "Chiku is listening…",
+  "talk.noEars": "Chiku's ears do not work on this device — show him or tap your answer instead!",
+
   "choice.fingers": "{n} fingers",
   "choice.wave.waving": "The waving hand",
   "choice.wave.still": "The resting hand",

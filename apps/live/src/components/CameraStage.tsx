@@ -50,6 +50,16 @@ export interface CameraStageHandle {
   applyFrame(frame: VisionFrame): void;
   setEmote(emote: Emote): void;
   setViseme(viseme: Viseme | null): void;
+  /**
+   * Jaw openness while CHIKU is talking, 0..1 — or null to hand the mouth back
+   * to the vision frame.
+   *
+   * Two things drive this jaw and only one may win at a time: the mirrored
+   * smile (applyFrame, at camera rate) and speech. Speech wins while it is
+   * speaking, otherwise the next camera frame would slam the mouth shut
+   * between two syllables and Chiku would look like he is chewing.
+   */
+  setMouthOpen(open: number | null): void;
   blink(): void;
   /** Idle the rig when there is no camera at all, so he is never a statue. */
   setAttention(on: boolean): void;
@@ -77,6 +87,8 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
   const hostRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const rigRef = useRef<LiveRig | null>(null);
+  /** Non-null while speech owns the jaw; see setMouthOpen. */
+  const speechMouthRef = useRef<number | null>(null);
   const factory = rigFactory ?? createLiveRig;
 
   useEffect(() => {
@@ -103,20 +115,24 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
       applyFrame(frame) {
         const rig = rigRef.current;
         if (!rig) return;
+        const talking = speechMouthRef.current !== null;
         const face = frame.face;
         if (face) {
           // The single strongest presence cue: the eyes go where the child is
           // — on the mirrored picture the child is actually looking at.
           rig.setGaze(face.x * MIRROR_X, face.y);
           rig.setAttention(face.attention >= ATTENTION_THRESHOLD);
-          // Smile back, and let the jaw follow the smile so the face is not a mask.
-          rig.setViseme(face.smile >= MIRROR_SMILE_THRESHOLD ? "smile" : null);
-          rig.setMouthOpen(Math.min(0.4, face.smile * 0.4));
+          // Smile back, and let the jaw follow the smile so the face is not a
+          // mask — unless Chiku is mid-sentence, in which case the jaw is his.
+          rig.setViseme(face.smile >= MIRROR_SMILE_THRESHOLD && !talking ? "smile" : null);
+          if (!talking) rig.setMouthOpen(Math.min(0.4, face.smile * 0.4));
         } else {
           // Nobody found: the rig wanders, which reads as "waiting", not "dead".
           rig.setAttention(false);
-          rig.setViseme(null);
-          rig.setMouthOpen(0);
+          if (!talking) {
+            rig.setViseme(null);
+            rig.setMouthOpen(0);
+          }
         }
       },
       setEmote(emote) {
@@ -124,6 +140,10 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
       },
       setViseme(viseme) {
         rigRef.current?.setViseme(viseme);
+      },
+      setMouthOpen(open) {
+        speechMouthRef.current = open;
+        rigRef.current?.setMouthOpen(open ?? 0);
       },
       blink() {
         rigRef.current?.blink();
