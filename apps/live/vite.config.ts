@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -42,6 +45,35 @@ function csp(isDev: boolean): Plugin {
   };
 }
 
+
+/**
+ * Self-signed dev cert — OPT-IN, via CHIKU_HTTPS=1.
+ *
+ * Not the default, deliberately. `http://localhost` is ALREADY a secure
+ * context, so HTTPS buys the normal workflow nothing and costs a browser
+ * warning on every start. It is only needed to reach the app from a phone or
+ * tablet, where a plain-http LAN address is NOT a secure context and the
+ * camera would silently never prompt.
+ *
+ *   pnpm dev:live       localhost, plain http, no warning   (unchanged)
+ *   pnpm dev:live:lan   https on the LAN, camera works off-device
+ */
+function devHttps(): { https?: { key: Buffer; cert: Buffer } } {
+  if (process.env["CHIKU_HTTPS"] !== "1") return {};
+  const dir = fileURLToPath(new URL("./certs", import.meta.url));
+  const key = join(dir, "dev-key.pem");
+  const cert = join(dir, "dev-cert.pem");
+  if (!existsSync(key) || !existsSync(cert)) {
+    throw new Error(
+      "CHIKU_HTTPS=1 but no dev cert. Generate one:\n" +
+        "  mkdir -p apps/live/certs && cd apps/live/certs && openssl req -x509 \\\n" +
+        "    -newkey rsa:2048 -nodes -keyout dev-key.pem -out dev-cert.pem -days 365 \\\n" +
+        '    -subj "/CN=chiku-live-dev" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:<your-lan-ip>"',
+    );
+  }
+  return { https: { key: readFileSync(key), cert: readFileSync(cert) } };
+}
+
 export default defineConfig(({ mode }) => ({
   plugins: [react(), csp(mode !== "production")],
   server: {
@@ -50,10 +82,15 @@ export default defineConfig(({ mode }) => ({
     // on [::1] alone: http://127.0.0.1:5175 is refused, and no phone on the LAN
     // can reach it at all — which matters here, because the camera is the point
     // and desktop browsers are not where a child would use this.
-    // NOTE: phone testing still needs HTTPS. getUserMedia requires a secure
-    // context, and plain http:// over a LAN address is not one (localhost is
-    // the only exempt origin). Use a tunnel or a local cert for real devices.
     host: true,
+    // …and reaching it is not enough: getUserMedia needs a SECURE CONTEXT, and
+    // a plain-http LAN address is not one (localhost is the only exempt
+    // origin). Without this the app loads on a phone and the camera silently
+    // never prompts — the exact confusion this project already hit once.
+    // So: if a dev cert exists, serve HTTPS. Generated, gitignored, and
+    // optional, so `pnpm dev:live` on localhost behaves exactly as before when
+    // it is absent. See apps/live/README.md for the one-line openssl command.
+    ...devHttps(),
   },
   // The .task bundles are float16 and barely compress; don't waste build time.
   build: { assetsInlineLimit: 0 },
