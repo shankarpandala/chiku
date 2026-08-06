@@ -98,6 +98,17 @@ export const ATTENTION_HOLD_FRAMES = 6;
 export const ATTENTION_FADE_PER_FRAME = 0.5;
 
 /** Above this, Chiku smiles back. Mirroring is the cheapest warmth there is. */
+/**
+ * How small and how big Chiku may get while mirroring the child.
+ *
+ * Not 0..2. Below about half he stops reading as a character and starts
+ * reading as a bug, and above about 1.4 his head leaves the stage frame — and
+ * a child copying an elephant whose face has gone off the top of the picture
+ * has been given a worse game, not a bigger one.
+ */
+export const CHIKU_MIN_SIZE = 0.6;
+export const CHIKU_MAX_SIZE = 1.4;
+
 export const MIRROR_SMILE_THRESHOLD = 0.4;
 
 /**
@@ -192,6 +203,20 @@ export interface CameraStageHandle {
    */
   setMouthOpen(open: number | null): void;
   blink(): void;
+  /**
+   * How BIG Chiku is, as a multiple of his normal size.
+   *
+   * The big/small activity asks the child to make themselves enormous and then
+   * tiny, and a character who says "now make yourself big!" without changing
+   * size himself is giving an instruction rather than playing a game. So the
+   * surface mirrors the child's own size onto him at camera rate.
+   *
+   * Imperative and outside React for the same reason `applyFrame` is: this
+   * moves every frame, and committing React thirty times a second to animate a
+   * transform is the thing this handle exists to avoid. Clamped here rather
+   * than at the call site so no caller can make him a dot or a wall.
+   */
+  setSize(scale: number): void;
   /**
    * Idle the rig when there is no camera at all, so he is never a statue.
    * An explicit override also resets the attention gate: whatever the camera
@@ -335,6 +360,15 @@ export const CameraStage = forwardRef<CameraStageHandle, CameraStageProps>(funct
       },
       blink() {
         rigRef.current?.blink();
+      },
+      setSize(scale) {
+        const host = hostRef.current;
+        if (!host) return;
+        const safe = Number.isFinite(scale) ? Math.min(CHIKU_MAX_SIZE, Math.max(CHIKU_MIN_SIZE, scale)) : 1;
+        // A custom property rather than `style.transform`: the no-camera rule
+        // already owns the transform (it centres him), and overwriting it here
+        // would slide him off the stage the moment the camera was refused.
+        host.style.setProperty("--chiku-size", safe.toFixed(3));
       },
       setAttention(on) {
         attentionRef.current.reset();

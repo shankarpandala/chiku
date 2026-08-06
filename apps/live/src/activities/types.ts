@@ -23,7 +23,8 @@
 //      complete behaviour.
 
 import type { Emote } from "@chiku/rig";
-import type { VisionFrame } from "../vision/types";
+import type { FaceSignal, HandSignal, VisionFrame } from "../vision/types";
+import { Presence, PRESENCE_DECAY, DEFAULT_LOST_FRAMES } from "../vision/stability";
 // Type-only, so no runtime edge is added from the activities layer into the
 // components layer: `HuntColour` is the vocabulary of the colour game, and it
 // happens to live next to the lens that measures it.
@@ -58,10 +59,36 @@ export function copyKey(key: string, fallback: I18nKey): I18nKey {
   return optionalCopyKey(key) ?? fallback;
 }
 
-export type ActivityKind = "fingers" | "wave" | "smile" | "hunt";
+export type ActivityKind =
+  | "fingers"
+  | "wave"
+  | "smile"
+  | "hunt"
+  | "successor"
+  | "bigsmall"
+  | "thumbs"
+  | "peekaboo";
 
-/** Language-neutral pictures for the tap answers. */
-export type GlyphName = "wave" | "still" | "smile" | "sad";
+/**
+ * Language-neutral pictures for the tap answers.
+ *
+ * NOTE FOR WHOEVER OWNS `components/Glyph.tsx`: the six names below the
+ * original four have no shape drawn for them yet. `Glyph` renders nothing for
+ * a name it does not know, so a tap answer using one of them is a button with
+ * an accessible name and an empty face. See the Phase 5 report — the shapes
+ * are the last thing between these activities and a child.
+ */
+export type GlyphName =
+  | "wave"
+  | "still"
+  | "smile"
+  | "sad"
+  | "big"
+  | "small"
+  | "thumbUp"
+  | "thumbDown"
+  | "hide"
+  | "peek";
 
 /**
  * What counts as the right answer OUT LOUD, per language.
@@ -249,4 +276,140 @@ export function verdictFor(activity: Activity, frame: VisionFrame): HoldVerdict 
 export function randInt(random: () => number, min: number, max: number): number {
   const span = max - min + 1;
   return min + Math.min(span - 1, Math.floor(random() * span));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Number words                                                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What each number sounds like, in both languages.
+ *
+ * The Telugu rows carry script AND the Latin spellings a recogniser actually
+ * emits: on-device recognition running as en-IN hears "moodu" and writes it in
+ * Latin letters, and a bilingual child in Hyderabad says "moodu" in the middle
+ * of an English sentence anyway. Bare digits sit in the en row because that is
+ * what en-IN writes for "three".
+ *
+ * Lives here rather than in `fingers.ts` because two activities now count —
+ * `fingers` asks for N and `successor` asks for the one after it — and two
+ * copies of this table would drift the first time a spelling is added to one.
+ * (`fingers.ts` still has its own private copy; folding it into this one is a
+ * one-line change for whoever owns that file next.)
+ */
+export const NUMBER_WORDS: Readonly<Record<number, SpokenAnswers>> = Object.freeze({
+  1: { te: ["ఒకటి", "ఒక్కటి", "okati", "okkati", "oka"], en: ["one", "1"] },
+  2: { te: ["రెండు", "rendu", "rendo", "reddu"], en: ["two", "2"] },
+  3: { te: ["మూడు", "moodu", "mudu", "muudu", "mudhu"], en: ["three", "3"] },
+  4: { te: ["నాలుగు", "naalugu", "nalugu", "nalgu"], en: ["four", "4"] },
+  5: { te: ["ఐదు", "aidu", "aydu", "ayidu"], en: ["five", "5"] },
+});
+
+/** The empty answer set — spoken answers a language has no word for. */
+export const NO_SPOKEN_ANSWERS: SpokenAnswers = Object.freeze({ te: [], en: [] });
+
+/* -------------------------------------------------------------------------- */
+/* Body geometry — shared by the whole-body activities                         */
+/* -------------------------------------------------------------------------- */
+
+export interface ImagePoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * The face centre in the SAME 0..1 image space the wrists live in.
+ *
+ * Not an approximation: `vision/gaze.ts` builds `FaceSignal.x/y` as
+ * `centre * 2 - 1`, and this is exactly that inverted. Without it every
+ * comparison between a face and a wrist is a silent coordinate-space bug —
+ * `face.y` counts from -1 at the top, `wrist.y` from 0 at the top.
+ */
+export function faceImagePoint(face: FaceSignal): ImagePoint {
+  return { x: (face.x + 1) / 2, y: (face.y + 1) / 2 };
+}
+
+/** Above this belief the primary person is still "here", face or no face. */
+export const FACE_BELIEVED = 0.5;
+
+/**
+ * Where the child's face was, surviving a tracker blink.
+ *
+ * The whole-body activities measure wrists AGAINST the face, so a single
+ * dropped face detection would otherwise delete the ruler and score the frame
+ * as "not big" — the exact Phase 1 failure, one layer up. So the last seen
+ * position is remembered and stays valid for as long as `facePresence` still
+ * believes the child is there.
+ *
+ * The local `Presence` is a stand-in for frames that carry no `facePresence`
+ * (hand-built fixtures, and any surface that forgets to plumb it). Rise is 1,
+ * as in `CameraStage`'s attention gate: a detected face is believed at once,
+ * because there is nothing about a position to ramp.
+ */
+export class FaceAnchor {
+  #point: ImagePoint | null = null;
+  #local = new Presence(DEFAULT_LOST_FRAMES, 1, PRESENCE_DECAY);
+  #belief = 0;
+
+  /** One frame in; where the face is, or null if we no longer believe in it. */
+  update(frame: VisionFrame): ImagePoint | null {
+    const local = this.#local.update(frame.face !== null);
+    this.#belief = frame.facePresence ?? local;
+    if (frame.face !== null) {
+      this.#point = faceImagePoint(frame.face);
+      return this.#point;
+    }
+    return this.#belief >= FACE_BELIEVED ? this.#point : null;
+  }
+
+  /** How strongly the primary person is believed present, 0..1. */
+  get belief(): number {
+    return this.#belief;
+  }
+}
+
+/**
+ * How far from the face a wrist may be and still plausibly belong to that
+ * child. Generous on purpose — arms straight up put a wrist a long way from a
+ * face centre, and the cost of being generous is only that a sibling standing
+ * shoulder-to-shoulder makes the frame AMBIGUOUS (see `childHands`), which
+ * scores as "unknown" and costs the child nothing.
+ */
+export const ARM_REACH = 0.5;
+
+/**
+ * The hands that could be this child's: everything within arm's reach of their
+ * face. `VisionFrame.hands` is explicitly everyone's hands — only
+ * `totalFingers` is subject-locked — so an activity that reads hands directly
+ * has to do this itself or it will let a sibling answer.
+ */
+export function childHands(
+  frame: VisionFrame,
+  anchor: ImagePoint,
+): readonly HandSignal[] {
+  return frame.hands.filter(
+    (h) => Math.hypot(h.wrist.x - anchor.x, h.wrist.y - anchor.y) <= ARM_REACH,
+  );
+}
+
+/**
+ * Run `advance` at most once per vision frame.
+ *
+ * Every stateful activity below counts FRAMES, and both `matches` and
+ * `hasEvidence` are handed the same frame — so an unguarded counter advances
+ * twice per frame through `verdictFor` and not at all through a caller that
+ * only asks one of the two. Keying on `frame.t` (monotonic, from the vision
+ * clock) makes the two entry points idempotent and the frame counts mean what
+ * they say.
+ */
+export function perFrame<S>(advance: (frame: VisionFrame) => S): (frame: VisionFrame) => S {
+  let seenT = Number.NaN;
+  let last: S | undefined;
+  return (frame) => {
+    if (frame.t !== seenT || last === undefined) {
+      seenT = frame.t;
+      last = advance(frame);
+    }
+    return last;
+  };
 }

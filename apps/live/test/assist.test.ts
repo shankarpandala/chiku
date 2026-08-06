@@ -933,7 +933,9 @@ describe("a line swallowed by an open mic is not lost", () => {
     click(container.querySelector('[data-choice="fingers-3"]'));
     await tick(10);
 
-    expect(voice.said().at(-1)).toBe("Wow! Look at you!");
+    // `warm`, not `light`: one miss and then a win with no help is the
+    // unhelped-but-hard-won case (assist.ts `praiseToneFor`).
+    expect(voice.said().at(-1)).toBe("Yes! Chiku saw that!");
   });
 });
 

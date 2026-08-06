@@ -148,7 +148,12 @@ body {
   pointer-events: none;
 }
 
-/* Chiku sits beside the child, bottom-right, feet in the same frame. */
+/* Chiku sits beside the child, bottom-right, feet in the same frame.
+
+   `--chiku-size` is how big he is right now: 1 normally, and driven from the
+   child's own size while the big/small activity is running (CameraStage
+   `setSize`). It scales from his FEET, so growing lifts his head rather than
+   sinking him through the floor of the stage. */
 .stage-chiku {
   position: absolute;
   right: 1.5%;
@@ -156,13 +161,20 @@ body {
   width: 40%;
   aspect-ratio: 224 / 212;
   filter: drop-shadow(0 6px 10px rgb(44 42 53 / 22%));
+  transform: scale(var(--chiku-size, 1));
+  transform-origin: 50% 100%;
+  /* Short: this is mirroring a child's body, and a lag they can feel reads as
+     Chiku copying somebody else. Killed entirely under reduced motion. */
+  transition: transform 120ms ease-out;
 }
 
 /* No camera: Chiku takes the whole frame rather than sharing it with a void. */
 .stage.no-camera .stage-chiku {
   right: auto;
   left: 50%;
-  transform: translateX(-50%);
+  /* Both transforms, in one declaration: the centring must survive the size. */
+  transform: translateX(-50%) scale(var(--chiku-size, 1));
+  transform-origin: 50% 100%;
   width: 62%;
 }
 

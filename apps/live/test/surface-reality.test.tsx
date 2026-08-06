@@ -611,7 +611,7 @@ describe("Live — the hard session cap (§9.5)", () => {
         vi.advanceTimersByTime(4 * 60_000 + 59_000);
       });
       click(container.querySelector('[data-choice="fingers-3"]'));
-      expect(text()).toContain("Wow! Look at you!");
+      expect(text()).toContain("You tried and tried. Chiku is so happy!");
 
       // The 5s tick now crosses the cap while the child is being congratulated.
       await act(async () => {
@@ -619,7 +619,7 @@ describe("Live — the hard session cap (§9.5)", () => {
       });
       // Still celebrating. Ending here would replace "you did it" with "time's
       // up" on the same beat, which is the meanest possible reading of a cap.
-      expect(text()).toContain("Wow! Look at you!");
+      expect(text()).toContain("You tried and tried. Chiku is so happy!");
       expect(container.querySelector("[data-phase='playing']")).not.toBeNull();
 
       // The praise runs out; THEN the day ends.

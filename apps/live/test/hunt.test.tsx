@@ -110,7 +110,7 @@ vi.mock("../src/vision/engine", () => ({
 import { Live } from "../src/surfaces/live/Live";
 import { LangProvider } from "../src/i18n";
 import type { RigFactory } from "../src/components/CameraStage";
-import { buildRound, FACTORIES, ROUND_LENGTH } from "../src/activities";
+import { POOL } from "../src/activities";
 import { createHuntActivity, HUNT_HOLD_MS, HUNT_PRESENCE } from "../src/activities/hunt";
 import { verdictFor, type Activity } from "../src/activities/types";
 import {
@@ -157,22 +157,28 @@ function quad(patch: Partial<Quad> = {}): Quad {
   };
 }
 
-/**
- * A random that hands back a fixed prefix and then a constant.
- *
- * The surface tests elsewhere all use a constant 0.5, which — with the hunt
- * inserted where it is in FACTORIES — draws [fingers, smile, wave]. This one
- * draws a round that STARTS with the hunt, on red, with the swatches in
- * HUNT_ORDER. Every number is doing a job: three for the shuffle, one for the
- * target colour, one for the swatch rotation.
- */
+/** A random that hands back a fixed prefix and then a constant. */
 function seq(...values: readonly number[]): () => number {
   let i = 0;
   return () => values[i++] ?? 0.5;
 }
 
-/** [hunt(red), wave, smile], swatches unrotated. */
-const HUNT_FIRST = (): (() => number) => seq(0, 0, 0.9, 0, 0);
+/**
+ * A round that STARTS with the hunt, on red, with the swatches in HUNT_ORDER.
+ *
+ * DERIVED FROM THE POOL, not written as a fixed list of offsets. `buildRound`
+ * draws one sort key per pool entry, in `ACTIVITY_SPEC` order, and the lowest
+ * key goes first — so the hunt gets 0 and everything else gets 1, whatever the
+ * pool happens to contain. The previous version of this fixture was five
+ * hand-counted numbers, and Phase 5 taking the pool from four activities to
+ * eight would have silently stopped putting the hunt first: thirteen tests
+ * still green, none of them testing the hunt.
+ *
+ * The two zeroes after the keys are the hunt factory's own draws — the target
+ * colour (red) and the swatch rotation (none).
+ */
+const HUNT_FIRST = (): (() => number) =>
+  seq(...POOL.map((entry) => (entry.id === "hunt" ? 0 : 1)), 0, 0);
 /** The constant every other surface test uses: [fingers, smile, wave]. */
 const HALF = (): number => 0.5;
 
@@ -601,43 +607,6 @@ describe("hunt — copy, in both scripts", () => {
 });
 
 /* ========================================================================== */
-/* the rotation                                                               */
-/* ========================================================================== */
-
-describe("hunt — in the rotation", () => {
-  it("is one of the factories a round can draw", () => {
-    expect(FACTORIES.length).toBe(4);
-    const kinds = new Set<string>();
-    for (let i = 0; i < 300; i += 1) {
-      for (const a of buildRound(Math.random)) kinds.add(a.kind);
-    }
-    expect(kinds).toEqual(new Set(["fingers", "wave", "smile", "hunt"]));
-  });
-
-  it("does not make the session longer — three activities, as before", () => {
-    expect(ROUND_LENGTH).toBe(3);
-    for (let i = 0; i < 50; i += 1) {
-      expect(buildRound(Math.random).length).toBe(3);
-    }
-  });
-
-  it("never repeats an activity inside one round", () => {
-    for (let i = 0; i < 100; i += 1) {
-      const kinds = buildRound(Math.random).map((a) => a.kind);
-      expect(new Set(kinds).size).toBe(kinds.length);
-    }
-  });
-
-  it("leaves the constant-0.5 round exactly as it was", () => {
-    // Not a coincidence to lean on — the hunt's position in FACTORIES was
-    // chosen so that the fixture every other surface test is written against
-    // does not move. Pinned here so a future reorder fails loudly HERE rather
-    // than as four unrelated files going red.
-    expect(buildRound(HALF).map((a) => a.kind)).toEqual(["fingers", "smile", "wave"]);
-  });
-});
-
-/* ========================================================================== */
 /* the surface                                                                */
 /* ========================================================================== */
 
@@ -778,9 +747,10 @@ describe("Live — finding the red thing ends the round in praise", () => {
       await act(async () => {
         vi.advanceTimersByTime(2400);
       });
-      // Next activity is the wave. The stale coverage in the ref must not be
+      // Next activity is the counting game (the hunt-first fixture leaves the
+      // rest of the round in ACTIVITY_SPEC order). The stale coverage must not be
       // able to answer anything, and the hunt's window must be gone.
-      expect(text()).toContain("Wave to Chiku!");
+      expect(text()).toContain("Show me 3 fingers!");
       expect(container.querySelector('[data-streak="2"]')).toBeNull();
     } finally {
       vi.useRealTimers();
