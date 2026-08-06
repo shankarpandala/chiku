@@ -30,7 +30,23 @@
  * fatter and rarely straighten fully — expect the defaults to under-count on
  * small hands. `calibration.ts` stores a per-child override; run a calibration
  * pass ("show me five!") before trusting a count on a new child.
+ *
+ * HYSTERESIS
+ * ----------
+ * A finger used to flip at exactly the threshold, so a held-up finger measuring
+ * 149 / 151 / 150 / 149 flickered extended/curled/extended and the count with
+ * it. Strict to acquire, loose to keep: a finger becomes extended above the
+ * threshold and stays extended until it falls a further `hysteresisDeg` below
+ * it (150 -> 142 by default). This also shrinks the second-order damage: the
+ * ambiguity band is measured against whichever threshold is currently ACTIVE,
+ * so a steady finger at 145 is no longer "within 8deg of the boundary", no
+ * longer makes the hand unscoreable, and no longer feeds a null into the hold.
+ *
+ * Hysteresis needs the previous frame, which the pure function does not have;
+ * callers pass it in (`previous`), or use `StableHandCount` which holds it.
  */
+
+import { DEFAULT_LOST_FRAMES } from "./stability";
 
 /** A landmark in normalized image space. `z` is optional so fixtures stay 2D. */
 export interface Landmark {
@@ -89,6 +105,31 @@ export const AMBIGUITY_BAND_DEG = 8;
  */
 export const MAX_AMBIGUOUS_FINGERS = 1;
 
+/**
+ * How far below its threshold an ALREADY-EXTENDED finger may fall before it
+ * counts as curled again. 8deg, matching the ambiguity band: the whole width of
+ * "I cannot tell" is exactly the width we refuse to change our mind over.
+ * ADULT-DERIVED like the rest, and applied relative to whatever threshold
+ * calibration supplies, so a per-child pass keeps working unchanged.
+ */
+export const FINGER_HYSTERESIS_DEG = 8;
+
+/** Where a finger already believed extended lets go. 150 - 8 = 142. */
+export const FINGER_EXTENDED_RELEASE_ANGLE_DEG =
+  FINGER_EXTENDED_MIN_ANGLE_DEG - FINGER_HYSTERESIS_DEG;
+/** Same, for the thumb's tighter joint angle. */
+export const THUMB_EXTENDED_RELEASE_ANGLE_DEG =
+  THUMB_EXTENDED_MIN_ANGLE_DEG - FINGER_HYSTERESIS_DEG;
+
+/**
+ * Deliberately NOT a field on FingerThresholds: `calibration.ts` derives its
+ * bounds table from `keyof FingerThresholds`, and it stores exactly the four
+ * numbers a calibration pass measures. The hysteresis is a property of the
+ * detector, not of the child's hand, so it is a constant here and the release
+ * angle is always `calibrated threshold - FINGER_HYSTERESIS_DEG` — a per-child
+ * override of `fingerAngleDeg` moves both ends of the band together, which is
+ * what you want.
+ */
 export interface FingerThresholds {
   readonly fingerAngleDeg: number;
   readonly thumbAngleDeg: number;
@@ -157,16 +198,22 @@ export function angleAtDeg(a: Landmark, b: Landmark, c: Landmark): number {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Score one hand. Pure: same landmarks in, same answer out.
+ * Score one hand. Pure: same landmarks (and same `previous`) in, same answer
+ * out — the hysteresis state is a parameter, never a hidden field.
  *
  * Returns `total: null` when more than `maxAmbiguousFingers` joints sit within
- * `ambiguityBandDeg` of their threshold, or when the landmark array is not a
- * complete hand. `extended` still carries the best guess so a debug overlay can
- * show what the engine nearly decided.
+ * `ambiguityBandDeg` of their ACTIVE threshold, or when the landmark array is
+ * not a complete hand. `extended` still carries the best guess so a debug
+ * overlay can show what the engine nearly decided.
+ *
+ * `previous` is last frame's `extended`. Omit it and the function behaves
+ * exactly as it did before hysteresis existed (every finger judged against the
+ * strict threshold), which is what makes it safe to call from a cold start.
  */
 export function countExtendedFingers(
   landmarks: readonly Landmark[] | undefined | null,
   thresholds: FingerThresholds = ADULT_THRESHOLDS,
+  previous?: FiveBooleans | null,
 ): HandCount {
   if (!landmarks || landmarks.length < HAND_LANDMARK_COUNT) return UNSCOREABLE;
 
@@ -186,9 +233,14 @@ export function countExtendedFingers(
 
   for (let i = 0; i < 5; i += 1) {
     const angle = angles[i] ?? 0;
-    const threshold = i === 0 ? thresholds.thumbAngleDeg : thresholds.fingerAngleDeg;
-    const isExtended = angle > threshold;
-    if (Math.abs(angle - threshold) < thresholds.ambiguityBandDeg) ambiguousCount += 1;
+    const enter = i === 0 ? thresholds.thumbAngleDeg : thresholds.fingerAngleDeg;
+    // Already extended? Judge against the release angle instead — and measure
+    // ambiguity against that same active boundary, so the band travels with the
+    // decision rather than parking on top of a finger we already believe in.
+    const wasExtended = previous?.[i] ?? false;
+    const active = wasExtended ? enter - FINGER_HYSTERESIS_DEG : enter;
+    const isExtended = angle > active;
+    if (Math.abs(angle - active) < thresholds.ambiguityBandDeg) ambiguousCount += 1;
     extended.push(isExtended);
     if (isExtended) total += 1;
   }
@@ -235,7 +287,45 @@ function measureThumb(landmarks: readonly Landmark[]): number | null {
 export function isOpenPalm(
   landmarks: readonly Landmark[] | undefined | null,
   thresholds: FingerThresholds = ADULT_THRESHOLDS,
+  previous?: FiveBooleans | null,
 ): boolean {
-  const count = countExtendedFingers(landmarks, thresholds);
+  const count = countExtendedFingers(landmarks, thresholds, previous);
   return count.extended[1] && count.extended[2] && count.extended[3] && count.extended[4];
+}
+
+/**
+ * `countExtendedFingers` with the one frame of memory hysteresis needs, kept
+ * per hand by the caller. One instance per tracked hand — sharing one across
+ * two hands would let the left hand's fingers hold the right hand's open.
+ *
+ * A hand that cannot be measured at all (missing or incomplete landmarks) does
+ * not overwrite the memory: that is a tracker dropout, not the child curling
+ * their fingers, and the same lost-frame budget the rest of the forgiveness
+ * layer uses applies before we forget what we saw.
+ */
+export class StableHandCount {
+  #previous: FiveBooleans | null = null;
+  #lost = 0;
+
+  constructor(private readonly maxLostFrames: number = DEFAULT_LOST_FRAMES) {}
+
+  count(
+    landmarks: readonly Landmark[] | undefined | null,
+    thresholds: FingerThresholds = ADULT_THRESHOLDS,
+  ): HandCount {
+    const result = countExtendedFingers(landmarks, thresholds, this.#previous);
+    if (result === UNSCOREABLE) {
+      this.#lost += 1;
+      if (this.#lost > this.maxLostFrames) this.#previous = null;
+      return result;
+    }
+    this.#lost = 0;
+    this.#previous = result.extended;
+    return result;
+  }
+
+  reset(): void {
+    this.#previous = null;
+    this.#lost = 0;
+  }
 }

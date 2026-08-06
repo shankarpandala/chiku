@@ -37,14 +37,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Emote } from "@chiku/rig";
 import { Bilingual } from "../../components/Bilingual";
 import { BigButton } from "../../components/BigButton";
-import { CameraStage, ATTENTION_THRESHOLD, type CameraStageHandle, type RigFactory } from "../../components/CameraStage";
+import { CameraStage, type CameraStageHandle, type RigFactory } from "../../components/CameraStage";
 import { ChoiceButton } from "../../components/ChoiceButton";
 import { StreakStars } from "../../components/StreakStars";
 import { TalkButton } from "../../components/TalkButton";
 import { useReducedMotion } from "../../components/useReducedMotion";
 import { translate, useI18n, type I18nKey, type Lang, type Values } from "../../i18n";
 import { buildRound, HoldTracker, type Activity, type ActivityChoice } from "../../activities";
-import { randInt } from "../../activities/types";
+import { randInt, verdictFor } from "../../activities/types";
 import { createVisionEngine } from "../../vision/engine";
 import type { VisionEngine, VisionFrame, VisionStatus } from "../../vision/types";
 import { createListener, createSpeaker, isMicUnusable } from "../../voice";
@@ -312,9 +312,10 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     (frame: VisionFrame): void => {
       // 1. Presence first, unconditionally — Chiku looks at the child in every
       //    phase, including while a grown-up is reading the camera promise.
-      stageRef.current?.applyFrame(frame);
-
-      const seen = frame.face !== null && frame.face.attention >= ATTENTION_THRESHOLD;
+      //    The stage owns the attention gate and hands back its debounced
+      //    answer; the teal caption and the ring below are bound to that same
+      //    value, so they cannot disagree with where Chiku's eyes are.
+      const seen = stageRef.current?.applyFrame(frame) ?? false;
       if (seen !== attendingRef.current) {
         attendingRef.current = seen;
         setAttending(seen);
@@ -324,7 +325,9 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
       const activity = roundRef.current[indexRef.current];
       if (!activity) return;
-      if (holdRef.current.update(activity.matches(frame), frame.t, activity.holdMs)) succeed();
+      // Tri-state: a frame that could not answer the question is "unknown" and
+      // costs the child nothing. See activities/hold.ts.
+      if (holdRef.current.update(verdictFor(activity, frame), frame.t, activity.holdMs)) succeed();
     },
     [succeed],
   );

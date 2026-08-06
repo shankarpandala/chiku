@@ -373,7 +373,20 @@ describe("Live — Chiku looks at the child", () => {
     // The cue is a property of the frame, never of the character node.
     expect(container.querySelector(".stage-chiku.is-attending")).toBeNull();
 
+    // ONE dropped frame is a tracker blink, not a child leaving. This used to
+    // put the caption back to "looking for you" and pull Chiku's eyes away
+    // mid-sentence — the strobe was worst during the fingers activity, where a
+    // child MUST look down at their own hands. The cue and the rig are now
+    // bound to the same debounced state (see createAttentionGate).
     pushFrames([frame({ t: 500, face: null })]);
+    expect(container.querySelector(".stage.is-attending")).not.toBeNull();
+    expect(text()).toContain("Chiku sees you!");
+    expect(rig.attention.at(-1)).toBe(true);
+
+    // Sustained absence is a different fact, and he does let go of it.
+    pushFrames(
+      Array.from({ length: 12 }, (_, i) => frame({ t: 700 + i * 200, face: null })),
+    );
     expect(container.querySelector(".stage.is-attending")).toBeNull();
     expect(text()).toContain("Chiku is looking for you…");
     expect(rig.attention.at(-1)).toBe(false);

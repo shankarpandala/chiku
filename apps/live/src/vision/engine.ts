@@ -38,10 +38,19 @@ import type {
 } from "@mediapipe/tasks-vision";
 
 import type { HandSignal, VisionEngine, VisionFrame, VisionStatus } from "./types";
-import { countExtendedFingers, isOpenPalm } from "./fingers";
-import { faceToGaze } from "./gaze";
-import { WaveDetector } from "./wave";
+import { countExtendedFingers, isOpenPalm, type Landmark } from "./fingers";
+import { faceBounds, faceCentre, faceToGaze, type BlendshapeCategory } from "./gaze";
+import { WaveTracker } from "./wave";
 import { getCalibration, type VisionCalibration } from "./calibration";
+import {
+  DEFAULT_LOST_FRAMES,
+  Presence,
+  StablePoint,
+  SubjectLock,
+  distance,
+  type Point,
+  type Subject,
+} from "./stability";
 
 /* -------------------------------------------------------------------------- */
 /* Configuration                                                              */
@@ -54,8 +63,60 @@ export const HAND_MODEL_PATH = "/vision/gesture_recognizer.task";
 
 export const DEFAULT_TARGET_FPS = 24;
 
+/**
+ * Faces the model is allowed to return.
+ *
+ * NOT 1. With one face the tracker silently hands us whoever it ranks first,
+ * which flips between people between frames — the "whose body is this?" bug.
+ * The lock below can only refuse a stranger if it can *see* the stranger, so it
+ * needs candidates. Three covers the normal Indian living room: the child, a
+ * parent, one sibling.
+ *
+ * COST: the mesh runs per detected face, so this is only paid when the extra
+ * people are actually there — a child alone still costs one face. Published
+ * figures put the mesh around 6ms/face on GPU; the loop's duty-cycle throttle
+ * turns any overrun into lower fps rather than a stalled main thread. NOT
+ * MEASURED on this branch (no camera in the test environment) — measure on the
+ * mid-range Android before trusting the number.
+ */
+export const MAX_FACES = 3;
+
+/**
+ * Hands the model is allowed to return.
+ *
+ * NOT 2. Filtering other people's hands out of the count does not, by itself,
+ * make "show me 3" reachable: with two slots, a parent's resting hand occupies
+ * one and the child only ever gets one hand tracked. Four slots means the
+ * child's two hands survive two other hands being in frame.
+ */
+export const MAX_HANDS = 4;
+
 /** Below this score MediaPipe's gesture label is noise, so we report none. */
 export const GESTURE_MIN_SCORE = 0.6;
+
+/**
+ * How far the locked face may move between processed frames and still be the
+ * same person. Matches `SubjectLock`'s own default so the pre-filter here and
+ * the lock's nearest-match agree exactly.
+ */
+export const FACE_LOCK_MAX_DRIFT = 0.25;
+/** Each frame the locked person is unseen widens the search by this fraction. */
+export const DRIFT_GROWTH_PER_LOST_FRAME = 0.25;
+/** …up to this multiple of the base radius, so drift can never span the room. */
+export const MAX_DRIFT_GROWTH = 2;
+
+/** As above, for the no-face fallback hand. */
+export const HAND_LOCK_MAX_DRIFT = 0.25;
+
+/**
+ * A person's arm reach, in multiples of their own face's bounding-box diagonal.
+ * Scaling by face size is what makes one number work at both "nose on the lens"
+ * and "sitting across the room".
+ */
+export const HAND_REACH_FACES = 2.5;
+/** Floor and ceiling on that reach, in normalized image units. */
+export const HAND_REACH_MIN = 0.35;
+export const HAND_REACH_MAX = 0.9;
 
 /** Consecutive inference throws tolerated before the run is declared broken. */
 const MAX_CONSECUTIVE_FAILURES = 3;
@@ -102,6 +163,226 @@ function defaultNow(): number {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Whose body is this?                                                        */
+/* -------------------------------------------------------------------------- */
+
+function clamp(v: number, lo: number, hi: number): number {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** The primary person's face and the hands we believe belong to them. */
+export interface PrimaryPerson<F extends Subject, H extends Subject> {
+  readonly face: F | null;
+  readonly hands: readonly H[];
+}
+
+/**
+ * One person, chosen once and kept.
+ *
+ * Two failures this exists to stop, both of them normal in a room with a
+ * sibling or a parent in it:
+ *
+ *   - the tracked face flips between people, so Chiku's gaze snaps away and a
+ *     sibling's smile completes the child's activity;
+ *   - fingers are summed over every hand in frame, so a parent's resting hand
+ *     makes "show me 3" unreachable and a sibling's 2 plus the child's 1 is a
+ *     false success.
+ *
+ * The face is the identity: `SubjectLock` picks the biggest face on the first
+ * frame (the person closest to the camera — the one playing) and thereafter the
+ * one nearest to where that person was. Candidates further than `maxDrift` from
+ * the lock are not offered to it at all, so a newcomer cannot be adopted just
+ * because the locked face dropped out for a frame; they are adopted only once
+ * the locked person has been missing for the whole dropout window.
+ *
+ * Hands then belong to whichever face they are nearest to, within that person's
+ * arm reach. Nearest-face rather than a bare radius, because a parent sitting
+ * shoulder-to-shoulder is inside any radius generous enough to hold the child's
+ * own outstretched arm.
+ */
+export class PrimaryPersonLock<F extends Subject, H extends Subject> {
+  readonly #faceLock: SubjectLock<F>;
+  readonly #handLock: SubjectLock<H>;
+  readonly #maxDrift: number;
+  readonly #maxLostFrames: number;
+
+  /** Where the locked person's face was, or null when nobody is locked. */
+  #anchor: Point | null = null;
+  /** Consecutive frames the locked person has not been among the candidates. */
+  #lost = 0;
+
+  constructor(maxDrift = FACE_LOCK_MAX_DRIFT, maxLostFrames = DEFAULT_LOST_FRAMES) {
+    this.#maxDrift = maxDrift;
+    this.#maxLostFrames = maxLostFrames;
+    this.#faceLock = new SubjectLock<F>(maxDrift, maxLostFrames);
+    this.#handLock = new SubjectLock<H>(HAND_LOCK_MAX_DRIFT, maxLostFrames);
+  }
+
+  update(faces: readonly F[], hands: readonly H[]): PrimaryPerson<F, H> {
+    const face = this.#pickFace(faces);
+    return { face, hands: this.#attribute(face, faces, hands) };
+  }
+
+  reset(): void {
+    this.#faceLock.reset();
+    this.#handLock.reset();
+    this.#anchor = null;
+    this.#lost = 0;
+  }
+
+  #pickFace(faces: readonly F[]): F | null {
+    const anchor = this.#anchor;
+    // The search radius GROWS while we cannot see them. A fixed radius is wrong
+    // on a slow device: at 4-6fps a child genuinely moves further between two
+    // frames than between two frames at 30fps, so a real move looked like a
+    // disappearance and cost seconds of blindness before re-acquiring.
+    // Time-since-seen is the honest scale for "how far could they have got".
+    // Bounded at 2x so someone standing across the room is still never adopted
+    // by drift — a genuinely new person must go through the full lost-window
+    // release path below.
+    const radius = Math.min(
+      this.#maxDrift * MAX_DRIFT_GROWTH,
+      this.#maxDrift * (1 + this.#lost * DRIFT_GROWTH_PER_LOST_FRAME),
+    );
+    const eligible =
+      anchor === null ? faces : faces.filter((f) => distance(anchor, f.centre) <= radius);
+
+    if (eligible.length === 0) {
+      // The person we are playing with is not in this frame. Hold — do not hand
+      // whoever else is standing there the child's activity.
+      this.#lost += 1;
+      this.#faceLock.pick([]);
+      if (this.#lost > this.#maxLostFrames) {
+        // Gone for good. Release, and let the room offer a new subject from the
+        // next frame on.
+        //
+        // (The growing radius above is what keeps a fast-moving child on a
+        // slow device from ever reaching this branch.)
+        this.#faceLock.reset();
+        this.#anchor = null;
+        this.#lost = 0;
+      }
+      return null;
+    }
+
+    this.#lost = 0;
+    const chosen = this.#faceLock.pick(eligible);
+    if (chosen !== null) this.#anchor = chosen.centre;
+    return chosen;
+  }
+
+  #attribute(face: F | null, faces: readonly F[], hands: readonly H[]): readonly H[] {
+    if (face === null) {
+      // No face means no way to tell whose hand is whose, so we trust exactly
+      // one: the hand we were already watching, else the largest. Counting two
+      // unattributable hands is precisely how a sibling's 2 and the child's 1
+      // became "three". The cost is that two-handed counts (6-10) need a face.
+      const one = this.#handLock.pick(hands);
+      return one === null ? [] : [one];
+    }
+
+    // Both of the primary person's hands count. A child asked for seven splits
+    // it across two hands, and a one-hand rule would cap every count at five.
+    const reach = clamp(HAND_REACH_FACES * face.size, HAND_REACH_MIN, HAND_REACH_MAX);
+    const mine: H[] = [];
+    for (const hand of hands) {
+      const own = distance(face.centre, hand.centre);
+      if (own > reach) continue;
+      let nearest = own;
+      for (const other of faces) {
+        // `face` is an element of `faces`, so this compares it against itself
+        // once — harmless, and keeps ties with the locked person.
+        const d = distance(other.centre, hand.centre);
+        if (d < nearest) nearest = d;
+      }
+      if (nearest >= own) mine.push(hand);
+    }
+    return mine;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Frame reduction                                                            */
+/* -------------------------------------------------------------------------- */
+
+/** A detected face, as the reducer needs it. `centre`/`size` come from `faceBounds`. */
+export interface FaceCandidate extends Subject {
+  readonly landmarks: readonly Landmark[];
+  readonly blendshapes: readonly BlendshapeCategory[] | undefined;
+}
+
+/** A detected hand. `centre` is the wrist; `size` the bounding-box diagonal. */
+export interface HandCandidate extends Subject {
+  readonly signal: HandSignal;
+  /** Open palm on this frame — the wave detector's other input. */
+  readonly open: boolean;
+}
+
+/**
+ * Everything that happens after inference, with no MediaPipe in sight: pick the
+ * person, attribute the hands, smooth the gaze, age the presence. Pure enough
+ * to drive from hand-built fixtures, which is the only way this logic gets
+ * tested at all — the models cannot run in a unit test.
+ */
+export class FrameReducer {
+  readonly #person = new PrimaryPersonLock<FaceCandidate, HandCandidate>();
+  readonly #waves = new WaveTracker();
+  /**
+   * Gaze outlier rejection. The rig's own 90ms EMA is smoothing, not rejection:
+   * it would happily ease Chiku's eyes onto the wrong person. This refuses the
+   * jump instead, and its alpha is adaptive so refusing costs no lag.
+   */
+  readonly #gaze = new StablePoint();
+  readonly #presence = new Presence();
+
+  reduce(
+    t: number,
+    faces: readonly FaceCandidate[],
+    hands: readonly HandCandidate[],
+  ): VisionFrame {
+    // Every hand feeds the tracker, including other people's: identity is
+    // cheaper to keep than to re-establish, and a hand that wanders in and out
+    // of "primary" must not restart its oscillation history each time.
+    const waves = this.#waves.update(
+      t,
+      hands.map((h) => ({ wrist: h.centre, open: h.open })),
+    );
+    const primary = this.#person.update(faces, hands);
+
+    let totalFingers: number | null = null;
+    let waving = false;
+    for (const hand of primary.hands) {
+      const fingers = hand.signal.fingers;
+      if (fingers !== null) totalFingers = (totalFingers ?? 0) + fingers;
+      const i = hands.indexOf(hand);
+      if (i >= 0 && waves[i]?.waving === true) waving = true;
+    }
+
+    const face = primary.face;
+    const facePresence = this.#presence.update(face !== null);
+    // StablePoint holds its last value through nulls, so a dropped frame does
+    // not restart the smoother when the child comes back.
+    const centre = this.#gaze.update(face === null ? null : faceCentre(face.landmarks));
+
+    return {
+      t,
+      face: face === null ? null : faceToGaze(face.landmarks, face.blendshapes, centre),
+      hands: hands.map((h) => h.signal),
+      totalFingers,
+      waving,
+      facePresence,
+    };
+  }
+
+  reset(): void {
+    this.#person.reset();
+    this.#waves.reset();
+    this.#gaze.reset();
+    this.#presence.reset();
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* Engine                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -134,8 +415,8 @@ class OnDeviceVisionEngine implements VisionEngine {
   #lastTimestamp = 0;
   #failures = 0;
 
-  /** One wave detector per hand, keyed by handedness. */
-  #waves = new Map<string, WaveDetector>();
+  /** Person lock, hand identity, gaze smoothing, presence — all of the above. */
+  readonly #reducer = new FrameReducer();
 
   constructor(opts: VisionEngineOptions = {}) {
     this.#now = opts.now ?? defaultNow;
@@ -246,7 +527,7 @@ class OnDeviceVisionEngine implements VisionEngine {
     this.#failures = 0;
     this.#nextAt = 0;
     this.#lastVideoTime = -1;
-    this.#waves.clear();
+    this.#reducer.reset();
     this.#setStatus("ready");
     this.#frameHandle = scheduleFrame(this.#tick);
   }
@@ -266,7 +547,7 @@ class OnDeviceVisionEngine implements VisionEngine {
         mp.FaceLandmarker.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: this.#opts.faceModelPath, delegate },
           runningMode: "VIDEO",
-          numFaces: 1,
+          numFaces: MAX_FACES,
           outputFaceBlendshapes: true,
         }),
       );
@@ -276,7 +557,7 @@ class OnDeviceVisionEngine implements VisionEngine {
         mp.GestureRecognizer.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: this.#opts.handModelPath, delegate },
           runningMode: "VIDEO",
-          numHands: 2,
+          numHands: MAX_HANDS,
         }),
       );
     }
@@ -339,20 +620,26 @@ class OnDeviceVisionEngine implements VisionEngine {
     const faceResult = face.detectForVideo(video, timestamp);
     const handResult = hands.recognizeForVideo(video, timestamp);
 
-    const faceLandmarks: readonly NormalizedLandmark[] | undefined = faceResult.faceLandmarks[0];
-    const blendshapes: readonly Category[] | undefined = faceResult.faceBlendshapes[0]?.categories;
+    // Every face the model returned is a candidate for "who are we playing
+    // with"; the reducer decides, and it is the only thing that may decide.
+    const faces: FaceCandidate[] = [];
+    for (let i = 0; i < faceResult.faceLandmarks.length; i += 1) {
+      const landmarks: readonly NormalizedLandmark[] | undefined = faceResult.faceLandmarks[i];
+      const bounds = faceBounds(landmarks);
+      if (!landmarks || bounds === null) continue;
+      const blendshapes: readonly Category[] | undefined =
+        faceResult.faceBlendshapes[i]?.categories;
+      faces.push({ centre: bounds.centre, size: bounds.size, landmarks, blendshapes });
+    }
 
-    const handSignals: HandSignal[] = [];
-    let totalFingers: number | null = null;
-    let waving = false;
-    const seen = new Set<string>();
-
+    const handCandidates: HandCandidate[] = [];
     for (let i = 0; i < handResult.landmarks.length; i += 1) {
       const landmarks = handResult.landmarks[i];
       if (!landmarks) continue;
 
       // Handedness is anatomical and reported against the unmirrored frame,
       // which is why the preview's mirroring must not be applied to landmarks.
+      // It is a label, never an identity — see WaveTracker.
       const handedness = handResult.handedness[i]?.[0]?.categoryName ?? "Unknown";
       const count = countExtendedFingers(landmarks, this.#calibration);
       const wrist = landmarks[0] ?? { x: 0.5, y: 0.5 };
@@ -363,44 +650,21 @@ class OnDeviceVisionEngine implements VisionEngine {
           ? top.categoryName
           : null;
 
-      // Two hands of the same reported handedness would collide on the key;
-      // suffix duplicates so each hand keeps its own oscillation history.
-      let key = handedness;
-      while (seen.has(key)) key = `${key}'`;
-      seen.add(key);
-
-      let detector = this.#waves.get(key);
-      if (!detector) {
-        detector = new WaveDetector();
-        this.#waves.set(key, detector);
-      }
-      if (detector.push(t, wrist.x, isOpenPalm(landmarks, this.#calibration))) waving = true;
-
-      if (count.total !== null) totalFingers = (totalFingers ?? 0) + count.total;
-
-      handSignals.push({
-        handedness,
-        fingers: count.total,
-        extended: count.extended,
-        gesture,
-        wrist: { x: wrist.x, y: wrist.y },
+      handCandidates.push({
+        centre: { x: wrist.x, y: wrist.y },
+        size: spanOf(landmarks),
+        open: isOpenPalm(landmarks, this.#calibration),
+        signal: {
+          handedness,
+          fingers: count.total,
+          extended: count.extended,
+          gesture,
+          wrist: { x: wrist.x, y: wrist.y },
+        },
       });
     }
 
-    for (const [key, detector] of this.#waves) {
-      if (!seen.has(key)) {
-        detector.reset();
-        this.#waves.delete(key);
-      }
-    }
-
-    this.#emit({
-      t,
-      face: faceToGaze(faceLandmarks, blendshapes),
-      hands: handSignals,
-      totalFingers,
-      waving,
-    });
+    this.#emit(this.#reducer.reduce(t, faces, handCandidates));
   }
 
   /* ---------------------------------------------------------------------- */
@@ -408,7 +672,7 @@ class OnDeviceVisionEngine implements VisionEngine {
   stop(): void {
     this.#stopLoop();
     this.#releaseCamera();
-    this.#waves.clear();
+    this.#reducer.reset();
     this.#busy = false;
     // denied/unavailable/error are sticky: the surface is showing a no-camera
     // path because of them, and stop() must not quietly erase the reason.
@@ -483,6 +747,25 @@ class OnDeviceVisionEngine implements VisionEngine {
 /* -------------------------------------------------------------------------- */
 /* Helpers                                                                    */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Bounding-box diagonal of a landmark set, normalized. Stands in for "how close
+ * to the camera" when the fallback has to choose between unattributable hands.
+ */
+function spanOf(landmarks: readonly Landmark[]): number {
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const p of landmarks) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return 0;
+  return Math.hypot(maxX - minX, maxY - minY);
+}
 
 async function withDelegateFallback<T>(create: (delegate: "GPU" | "CPU") => Promise<T>): Promise<T> {
   try {
