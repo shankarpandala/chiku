@@ -470,7 +470,7 @@ describe("Chiku speaks", () => {
     try {
       await enterPlaying(false);
       click(container.querySelector('[data-choice="fingers-3"]'));
-      expect(voice.last()?.text).toBe("Wow! Look at you!");
+      expect(voice.last()?.text).toBe("Got it!");
 
       for (let i = 0; i < 3; i++) {
         const correct = container.querySelector<HTMLButtonElement>(
@@ -496,7 +496,7 @@ describe("Chiku speaks", () => {
     expect(voice.state.lines).toHaveLength(0);
     expect(text()).toContain("Show me 3 fingers!");
     click(container.querySelector('[data-choice="fingers-3"]'));
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
   });
 });
 
@@ -554,7 +554,7 @@ describe("a spoken answer is an answer", () => {
 
     act(() => voice.hear("three", true, 0.8));
 
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
     expect(container.querySelector('[data-streak="1"]')).not.toBeNull();
   });
 
@@ -565,12 +565,12 @@ describe("a spoken answer is an answer", () => {
     act(() => voice.hear("three", false, 0.9));
 
     expect(text()).toContain("Show me 3 fingers!");
-    expect(text()).not.toContain("Wow! Look at you!");
+    expect(text()).not.toContain("Got it!");
     expect(container.querySelector('[data-streak="1"]')).toBeNull();
 
     // …and the same words, final, do count.
     act(() => voice.hear("three", true, 0.9));
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
   });
 
   // The normal path, not an exotic one: `stop()` delivers the final result on
@@ -583,7 +583,7 @@ describe("a spoken answer is an answer", () => {
 
     act(() => voice.hear("three", true));
 
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
   });
 
   it("speaks the retry once the child has let go and was misheard", async () => {
@@ -603,7 +603,7 @@ describe("a spoken answer is an answer", () => {
 
     act(() => voice.hear("Moodu!", true));
 
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
   });
 
   it("accepts Telugu script too", async () => {
@@ -612,7 +612,7 @@ describe("a spoken answer is an answer", () => {
 
     act(() => voice.hear("మూడు", true));
 
-    expect(text()).toContain("వావ్! ఎంత బాగా చేశావో!"); // praise.two, in Telugu
+    expect(text()).toContain("భలే!"); // praise.light.two, in Telugu
   });
 
   it("accepts the answer inside a whole sentence", async () => {
@@ -621,7 +621,7 @@ describe("a spoken answer is an answer", () => {
 
     act(() => voice.hear("i think it is three", true));
 
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
   });
 
   it("answers a wrong utterance with the warm retry, never a failure", async () => {
@@ -683,7 +683,7 @@ describe("barge-in", () => {
     act(() => voice.hear("three", true));
 
     expect(voice.state.stops).toBe(1); // the mic closed first…
-    expect(voice.last()?.text).toBe("Wow! Look at you!"); // …so this was heard
+    expect(voice.last()?.text).toBe("Got it!"); // …so this was heard
   });
 
   it("gives the jaw back so Chiku is not left mid-syllable", async () => {
@@ -708,7 +708,7 @@ describe("no microphone is not a dead end", () => {
     // The game is untouched.
     expect(text()).toContain("Show me 3 fingers!");
     click(container.querySelector('[data-choice="fingers-3"]'));
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
     expect(container.querySelector('[data-streak="1"]')).not.toBeNull();
   });
 
@@ -723,7 +723,7 @@ describe("no microphone is not a dead end", () => {
     expect(text()).toContain("Chiku's ears do not work on this device");
     // Still playable, immediately.
     click(container.querySelector('[data-choice="fingers-3"]'));
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
   });
 
   it("keeps the control when the child simply said nothing", async () => {

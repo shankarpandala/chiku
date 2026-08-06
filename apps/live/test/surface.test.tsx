@@ -306,7 +306,7 @@ describe("Live — denied camera", () => {
     expect(three).not.toBeNull();
     click(three);
 
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
     expect(container.querySelector('[data-streak="1"]')).not.toBeNull();
   });
 
@@ -333,7 +333,7 @@ describe("Live — the body is the answer", () => {
       frame({ t: 700, totalFingers: 3, face: face(0, 0) }),
     ]);
 
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
     expect(container.querySelector('[data-streak="1"]')).not.toBeNull();
     expect(rig.emotes).toContain("happy");
   });
@@ -351,7 +351,7 @@ describe("Live — the body is the answer", () => {
     ]);
 
     expect(text()).toContain("Show me 3 fingers!");
-    expect(text()).not.toContain("Wow! Look at you!");
+    expect(text()).not.toContain("Got it!");
     expect(container.querySelector('[data-streak="1"]')).toBeNull();
   });
 
@@ -365,7 +365,7 @@ describe("Live — the body is the answer", () => {
       frame({ t: 650, totalFingers: 3 }),
     ]);
 
-    expect(text()).toContain("Wow! Look at you!");
+    expect(text()).toContain("Got it!");
   });
 });
 

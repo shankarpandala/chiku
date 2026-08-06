@@ -37,7 +37,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Emote } from "@chiku/rig";
 import { Bilingual } from "../../components/Bilingual";
 import { BigButton } from "../../components/BigButton";
-import { CameraStage, type CameraStageHandle, type RigFactory } from "../../components/CameraStage";
+import {
+  CameraStage,
+  CHIKU_MAX_SIZE,
+  CHIKU_MIN_SIZE,
+  type CameraStageHandle,
+  type RigFactory,
+} from "../../components/CameraStage";
 import type { MagicWindowMode } from "../../components/MagicWindow";
 import type { HuntColour } from "../../components/magicLens";
 import { HUNT_PRESENCE } from "../../activities/hunt";
@@ -46,11 +52,20 @@ import { StreakStars } from "../../components/StreakStars";
 import { TalkButton } from "../../components/TalkButton";
 import { useReducedMotion } from "../../components/useReducedMotion";
 import { translate, useI18n, type I18nKey, type Lang, type Values } from "../../i18n";
-import { buildRound, HoldTracker, type Activity, type ActivityChoice } from "../../activities";
+import {
+  buildRound,
+  HoldTracker,
+  SIZE_MIRROR_KINDS,
+  type Activity,
+  type ActivityChoice,
+} from "../../activities";
+import { SMALL_DROP } from "../../activities/bigsmall";
 import {
   alongsideBeatsFor,
+  childHands,
   copyKey,
   demoBeatsFor,
+  FaceAnchor,
   optionalCopyKey,
   randInt,
   verdictFor,
@@ -106,6 +121,23 @@ const ASSIST_AFTER_MS = 8000;
  */
 const DEMO_LEAD_MS = 1500;
 
+/**
+ * How far above their own face a child has to get a wrist before Chiku is as
+ * big as he gets.
+ *
+ * The other end of the scale is `SMALL_DROP`, borrowed from the activity
+ * itself: this measures the SAME axis the big/small game scores — wrist height
+ * against the face centre — so Chiku is visibly following the thing that is
+ * about to be judged, rather than a second opinion drawn from the same body.
+ *
+ * THIS IS AN EXPRESSION, NOT A VERDICT. The activity keeps its own thresholds
+ * and its own hold; this only decides how big Chiku is, so it is deliberately
+ * smooth and generous where the score is discrete and strict. Mirroring is the
+ * point: a character who says "make yourself enormous!" and stays exactly the
+ * same size the whole time has given an instruction, not an invitation.
+ */
+const SIZE_MIRROR_FULL_LIFT = 0.25;
+
 /** How long "let's do it together!" sits before the counting-along starts. */
 const TOGETHER_LEAD_MS = 700;
 
@@ -132,31 +164,40 @@ const WINDOW_INVITE_MS = 2000;
 
 const PRAISES: readonly I18nKey[] = ["praise.one", "praise.two", "praise.three"];
 
-/** Most lines one praise bucket may hold. Missing ones are simply not there. */
-const PRAISE_BUCKET_MAX = 6;
+/**
+ * The suffixes a praise bucket is numbered with — words, not digits.
+ *
+ * THIS IS A BUG FIX, AND IT IS THE WHOLE REASON PHASE 5 HAS A SWEEP. This
+ * lookup asked for `praise.light.1`; the copy that landed beside it wrote
+ * `praise.light.one`. Nothing crashed and nothing failed: `optionalCopyKey`
+ * did exactly its job, found no numbered key, and every bucket quietly fell
+ * back to the three generic cheers. So the effort praise — thirteen lines,
+ * written in both languages, tested for tone in `cue.test.tsx` — had never
+ * once been said to a child, and the loudest celebration still went to the
+ * easiest win. A test that only checks that copy EXISTS cannot see that; the
+ * key-coverage test in `sweep.test.ts` can, and now does.
+ */
+const PRAISE_ORDINALS: readonly string[] = ["one", "two", "three", "four", "five", "six"];
 
 /**
- * Praise, bucketed by how hard the win was.
- *
- * Key shape, agreed with the copy change landing beside this one:
- * `praise.light.1…n`, `praise.warm.1…n`, `praise.effort.1…n`, picked from at
- * random within the bucket. Any bucket the dictionary does not carry yet falls
- * back to the three original lines, so this file behaves exactly as it did
- * before the buckets exist and improves the moment they land.
+ * Praise, bucketed by how hard the win was: `praise.light.*`, `praise.warm.*`,
+ * `praise.effort.*`, picked from at random within the bucket. A bucket the
+ * dictionary does not carry falls back to the three original lines, so a
+ * missing bucket is a plainer Chiku rather than a blank screen.
  *
  * `effort` copy must name the EFFORT and not the child — "you kept trying!",
  * never "clever girl" (Gunderson/Dweck; see `assist.ts`).
  */
 function praiseBucket(tone: PraiseTone): readonly I18nKey[] {
   const found: I18nKey[] = [];
-  for (let i = 1; i <= PRAISE_BUCKET_MAX; i += 1) {
-    const key = optionalCopyKey(`praise.${tone}.${i}`);
+  for (const ordinal of PRAISE_ORDINALS) {
+    const key = optionalCopyKey(`praise.${tone}.${ordinal}`);
     if (key) found.push(key);
   }
   return found.length > 0 ? found : PRAISES;
 }
 
-const PRAISE_BUCKETS: Readonly<Record<PraiseTone, readonly I18nKey[]>> = {
+export const PRAISE_BUCKETS: Readonly<Record<PraiseTone, readonly I18nKey[]>> = {
   light: praiseBucket("light"),
   warm: praiseBucket("warm"),
   effort: praiseBucket("effort"),
@@ -284,6 +325,13 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
    * number is measured in the renderer rather than in the vision layer.
    */
   const windowCoverageRef = useRef(0);
+  /**
+   * The child's face, surviving a tracker blink — the ruler the size mirror
+   * measures wrists against. One instance for the surface: it is fed at most
+   * once per frame (inside `handleFrame`), which is what its frame counting
+   * assumes.
+   */
+  const faceAnchorRef = useRef(new FaceAnchor());
   /** A window the child is really holding, right now. Drives the invitation. */
   const windowOpenRef = useRef(false);
   const [windowOpen, setWindowOpen] = useState(false);
@@ -353,6 +401,38 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
    */
   const takeWindowCoverage = useCallback((coverage: number): void => {
     windowCoverageRef.current = coverage;
+  }, []);
+
+  /**
+   * Make Chiku the size the child is making themselves.
+   *
+   * Reads the SAME geometry the body activities do — the shared face anchor
+   * and `childHands` from activities/types — rather than a second ruler of its
+   * own, so what Chiku does and what the activity scores are two views of one
+   * measurement instead of two measurements that can disagree while the child
+   * watches both.
+   *
+   * No face and no hands leaves his size exactly where it was. A child who
+   * steps out of frame for a moment has not become small.
+   */
+  const mirrorSize = useCallback((frame: VisionFrame): void => {
+    const anchor = faceAnchorRef.current.update(frame);
+    if (anchor === null) return;
+    const hands = childHands(frame, anchor);
+    if (hands.length === 0) return;
+    // Image space: y grows downwards, so a wrist ABOVE the face has the
+    // smaller y and `lift` is positive. Same inversion the activity does.
+    let lift = -Infinity;
+    for (const hand of hands) lift = Math.max(lift, anchor.y - hand.wrist.y);
+    const span = SMALL_DROP + SIZE_MIRROR_FULL_LIFT;
+    const t = Math.min(1, Math.max(0, (lift + SMALL_DROP) / span));
+    stageRef.current?.setSize(CHIKU_MIN_SIZE + t * (CHIKU_MAX_SIZE - CHIKU_MIN_SIZE));
+  }, []);
+
+  /** Back to his own size, and forget the ruler. Every prompt boundary. */
+  const restoreSize = useCallback((): void => {
+    faceAnchorRef.current = new FaceAnchor();
+    stageRef.current?.setSize(1);
   }, []);
 
   // --- voice ---------------------------------------------------------------
@@ -648,6 +728,9 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     attemptsRef.current = 0;
     setHoldProgress(0);
     setDemoSwatch(null);
+    // Whatever size the last activity left him is the last activity's. A new
+    // prompt starts with Chiku his own size, mirroring nobody.
+    restoreSize();
     // Whatever the last window found belongs to the last prompt. Carrying it
     // over would hand the next hunt a finished answer before it was asked.
     windowCoverageRef.current = 0;
@@ -669,7 +752,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       }, WINDOW_INVITE_MS);
     }
     armMissTimer();
-  }, [applyAssist, armMissTimer, later, say, setEmote]);
+  }, [applyAssist, armMissTimer, later, restoreSize, say, setEmote]);
 
   const goGoodbye = useCallback((): void => {
     clearTimers();
@@ -688,7 +771,9 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     // The camera light goes out the moment the game ends — visible privacy.
     engineRef.current?.stop();
     stageRef.current?.setAttention(true);
-  }, [clearTimers, closeMic, say, setEmote]);
+    // He waves goodbye at his own size, whatever the last activity left him.
+    restoreSize();
+  }, [clearTimers, closeMic, restoreSize, say, setEmote]);
 
   /**
    * The cap (§9.5), reached. This ends the show — warmly, through the ordinary
@@ -732,6 +817,8 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     setNudge(false);
     setNudgedId(null);
     setDemoSwatch(null);
+    // The celebration is Chiku's, not a continuation of the child's pose.
+    restoreSize();
     setStreak((s) => s + 1);
     // PRAISE IS CHOSEN BY EFFORT, NOT BY OUTCOME. It used to be a coin toss
     // between three interchangeable cheers, which meant the easiest win got
@@ -750,7 +837,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     // sentence, and this is also exactly what the silent surface does.
     say(praise, undefined, "happy", "happy");
     later(advance, PRAISE_MS);
-  }, [advance, clearTimers, closeMic, later, random, say, setEmote]);
+  }, [advance, clearTimers, closeMic, later, random, restoreSize, say, setEmote]);
   succeedRef.current = succeed;
 
   const startPlaying = useCallback((): void => {
@@ -805,6 +892,10 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
       const activity = roundRef.current[indexRef.current];
       if (!activity) return;
+      // Chiku grows and shrinks with the child, but only in the activity that
+      // is about being big and small. Everywhere else he is his own size, and
+      // a character who randomly changes size is a glitch, not a game.
+      if (SIZE_MIRROR_KINDS.has(activity.kind)) mirrorSize(frame);
       // The render layer's answer, merged in before any activity sees the
       // frame, so the Activity contract stays "one predicate over one frame".
       const scored: VisionFrame = { ...frame, windowCoverage: windowCoverageRef.current };
@@ -825,7 +916,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       const p = holdRef.current.progress(frame.t, holdMs);
       setHoldProgress(Math.round(p * 50) / 50);
     },
-    [holdMsFor, succeed],
+    [holdMsFor, mirrorSize, succeed],
   );
 
   // Latest-handler refs: the engine subscription is set up exactly once, but

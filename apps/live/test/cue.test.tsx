@@ -282,16 +282,18 @@ const PRAISE_KEYS = [
   "praise.effort.four",
 ] as const;
 
-const LADDER_KEYS = [
-  "watch.fingers",
-  "watch.wave",
-  "watch.smile",
-  "together.fingers",
-  "together.wave",
-  "together.smile",
-] as const;
-
-const NEW_KEYS = [...PRAISE_KEYS, ...LADDER_KEYS, "hold.counting"] as const;
+/**
+ * THE `watch.*` / `together.*` FAMILY IS GONE, and its assertions with it.
+ *
+ * Sixteen lines, in both languages, tone-checked here and never once said out
+ * loud: the ladder speaks through `demo.*` and `praise.nudge`, and nothing had
+ * ever referenced a `watch.` or `together.` key. Phase 5 deleted them and
+ * added `test/sweep.test.ts`, which fails the build for any dictionary key
+ * nothing in `src/` reaches — the durable version of the check that this list
+ * was trying to be. A copy test can only ever prove that a line EXISTS; only
+ * the sweep can prove a child could hear it.
+ */
+const NEW_KEYS = [...PRAISE_KEYS, "hold.counting"] as const;
 
 const enDict = en as Record<string, string | undefined>;
 const teDict = te as Record<string, string | undefined>;
@@ -351,18 +353,11 @@ describe("the mercy ladder copy exists in both languages", () => {
     }
   });
 
-  it("covers every activity kind on both rungs that speak", () => {
-    for (const kind of ["fingers", "wave", "smile"] as const) {
-      expect(enDict[`watch.${kind}`]).toBeTypeOf("string");
-      expect(teDict[`watch.${kind}`]).toBeTypeOf("string");
-      expect(enDict[`together.${kind}`]).toBeTypeOf("string");
-      expect(teDict[`together.${kind}`]).toBeTypeOf("string");
-    }
-    // "Together" has to sound like company, not like a correction.
-    for (const kind of ["fingers", "wave", "smile"] as const) {
-      expect(enDict[`together.${kind}`] ?? "").toMatch(/together/i);
-      expect(teDict[`together.${kind}`] ?? "").toMatch(/కలిసి/);
-    }
+  it("says 'together' like company, not like a correction", () => {
+    // What the deleted `together.*` family was really checking, kept and
+    // pointed at the line that is actually spoken on the bottom rung.
+    expect(enDict["demo.together"] ?? "").toMatch(/together/i);
+    expect(teDict["demo.together"] ?? "").toMatch(/కలిసి/);
   });
 });
 

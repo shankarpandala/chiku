@@ -10,7 +10,7 @@ Monorepo (pnpm). See `docs/chiku-architecture.md` for the architecture handoff a
 
 | Path | What |
 | --- | --- |
-| `apps/live` | **Chiku Live** — the realtime surface: Chiku sees you and you answer with your body (camera never leaves the device) |
+| `apps/live` | **Chiku Live** — the realtime surface: Chiku sees you and you answer with your body (camera never leaves the device). Activity roster and round rules: [`apps/live/README.md`](apps/live/README.md) |
 | `apps/web` | The episode player — authored episodes, checkpoints, TV stage + phone mic (tag `v0.1-episodes`) |
 | `apps/prototype` | The v0.1 design prototype (frozen reference; `pnpm dev:prototype`) |
 | `packages/schema` | zod contracts — Episode, RoomState, API IO |
