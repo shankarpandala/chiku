@@ -58,7 +58,14 @@
 import type { Category, NormalizedLandmark } from "@mediapipe/tasks-vision";
 
 import type { HandSignal, VisionEngine, VisionFrame, VisionStatus } from "./types";
-import { countExtendedFingers, isOpenPalm, type Landmark } from "./fingers";
+import {
+  ADULT_THRESHOLDS,
+  countExtendedFingers,
+  isOpenPalm,
+  type FingerThresholds,
+  type Landmark,
+} from "./fingers";
+import { QuadDetector, type HandLandmarks } from "./quad-detect";
 import { faceBounds, faceCentre, faceToGaze, type BlendshapeCategory } from "./gaze";
 import { WaveTracker } from "./wave";
 import { getCalibration, type VisionCalibration } from "./calibration";
@@ -449,6 +456,16 @@ export interface HandCandidate extends Subject {
   readonly signal: HandSignal;
   /** Open palm on this frame — the wave detector's other input. */
   readonly open: boolean;
+  /**
+   * The raw 21 landmarks, for consumers that need the hand's shape rather than
+   * its summary — currently only the magic window (`QuadDetector`), which has
+   * to build a quad out of specific fingertips.
+   *
+   * Optional so that fixtures which only exercise counting and attribution can
+   * keep supplying a wrist and a size. A hand without landmarks simply cannot
+   * make a window.
+   */
+  readonly landmarks?: readonly Landmark[];
 }
 
 /**
@@ -467,11 +484,24 @@ export class FrameReducer {
    */
   readonly #gaze = new StablePoint();
   readonly #presence = new Presence();
+  /**
+   * The magic window. Fed the PRIMARY person's hands and nobody else's, for the
+   * same reason the finger count is: a sibling reaching into frame must not be
+   * able to take the child's window away from them, or make one of their own.
+   */
+  readonly #quad = new QuadDetector();
 
   reduce(
     t: number,
     faces: readonly FaceCandidate[],
     hands: readonly HandCandidate[],
+    /**
+     * The calibrated finger thresholds this frame was scored against. The
+     * palm rung asks "how open is this hand?", so a child whose fingers the
+     * assist ladder has already relaxed the angles for must get the same
+     * relaxation here — otherwise the easier rung is the one they can't reach.
+     */
+    thresholds: FingerThresholds = ADULT_THRESHOLDS,
   ): VisionFrame {
     // Every hand feeds the tracker, including other people's: identity is
     // cheaper to keep than to re-establish, and a hand that wanders in and out
@@ -491,6 +521,12 @@ export class FrameReducer {
       if (i >= 0 && waves[i]?.waving === true) waving = true;
     }
 
+    const mine: HandLandmarks[] = [];
+    for (const hand of primary.hands) {
+      if (hand.landmarks !== undefined) mine.push(hand.landmarks);
+    }
+    const quad = this.#quad.update(mine, thresholds);
+
     const face = primary.face;
     const facePresence = this.#presence.update(face !== null);
     // StablePoint holds its last value through nulls, so a dropped frame does
@@ -504,6 +540,7 @@ export class FrameReducer {
       totalFingers,
       waving,
       facePresence,
+      quad,
     };
   }
 
@@ -512,6 +549,7 @@ export class FrameReducer {
     this.#waves.reset();
     this.#gaze.reset();
     this.#presence.reset();
+    this.#quad.reset();
   }
 }
 
@@ -899,6 +937,7 @@ class OnDeviceVisionEngine implements LifecycleVisionEngine {
         centre: { x: wrist.x, y: wrist.y },
         size: spanOf(landmarks),
         open: isOpenPalm(landmarks, this.#calibration),
+        landmarks,
         signal: {
           handedness,
           fingers: count.total,
@@ -909,7 +948,7 @@ class OnDeviceVisionEngine implements LifecycleVisionEngine {
       });
     }
 
-    this.#emit(this.#reducer.reduce(t, faces, handCandidates));
+    this.#emit(this.#reducer.reduce(t, faces, handCandidates, this.#calibration));
   }
 
   /* ---------------------------------------------------------------------- */

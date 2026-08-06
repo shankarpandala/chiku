@@ -22,6 +22,7 @@ import {
 } from "../src/activities/hold";
 import { createFingersActivity } from "../src/activities/fingers";
 import { createSmileActivity, SMILE_BAND, SMILE_THRESHOLD } from "../src/activities/smile";
+import { createHuntActivity } from "../src/activities/hunt";
 import { createWaveActivity } from "../src/activities/wave";
 import { verdictFor } from "../src/activities/types";
 import {
@@ -37,6 +38,7 @@ import {
   type FiveBooleans,
   type Landmark,
 } from "../src/vision/fingers";
+import type { Quad } from "../src/vision/quad";
 import type { FaceSignal, HandSignal, VisionFrame } from "../src/vision/types";
 
 /* -------------------------------------------------------------------------- */
@@ -54,6 +56,22 @@ function frame(patch: Partial<VisionFrame> & { t: number }): VisionFrame {
 
 function face(patch: Partial<FaceSignal> = {}): FaceSignal {
   return { x: 0, y: 0, attention: 0.9, smile: 0, ...patch };
+}
+
+/** A window the child is holding up. Corners are irrelevant here — only the
+ *  presence is, because that is what "there is a window" means. */
+function quad(): Quad {
+  return {
+    kind: "pinch",
+    corners: [
+      { x: 0.3, y: 0.3 },
+      { x: 0.7, y: 0.3 },
+      { x: 0.7, y: 0.7 },
+      { x: 0.3, y: 0.7 },
+    ],
+    centre: { x: 0.5, y: 0.5 },
+    presence: 0.9,
+  };
 }
 
 function hand(): HandSignal {
@@ -279,6 +297,34 @@ describe("activities — hasEvidence", () => {
     const smile = createSmileActivity(HALF);
     expect(verdictFor(smile, frame({ t: 0, face: face({ smile: 0.8 }) }))).toBe("match");
     expect(verdictFor(smile, frame({ t: 1, face: null }))).toBe("unknown");
+  });
+
+  it("treats no magic window as no evidence about the colour hunt", () => {
+    // The hunt is the one activity where the child has to BUILD the input
+    // device before they can use it, so "I have not worked out the gesture
+    // yet" is the most common frame it will ever see. Scoring that as a wrong
+    // answer would spend the child's slack on our own onboarding.
+    const hunt = createHuntActivity(HALF);
+    const found = { ...quad(), presence: 0.9 };
+    expect(verdictFor(hunt, frame({ t: 0, quad: found, windowCoverage: 0.9 }))).toBe("match");
+    expect(verdictFor(hunt, frame({ t: 1, quad: found, windowCoverage: 0 }))).toBe("mismatch");
+    expect(verdictFor(hunt, frame({ t: 2, quad: null, windowCoverage: 0.9 }))).toBe("unknown");
+    expect(verdictFor(hunt, frame({ t: 3 }))).toBe("unknown");
+  });
+
+  it("completes the hunt across the window blinking in and out", () => {
+    const hunt = createHuntActivity(HALF);
+    const tracker = new HoldTracker();
+    const found = { ...quad(), presence: 0.9 };
+    // What a five-year-old's hand-frame actually produces: the window keeps
+    // dropping out as their fingers relax. None of it is a wrong answer.
+    const windows: Array<typeof found | null> = [found, null, found, null, null, found, found];
+    let completions = 0;
+    windows.forEach((q, i) => {
+      const f = frame({ t: i * SLOW_FRAME_MS, quad: q, windowCoverage: q ? 0.9 : 0 });
+      if (tracker.update(verdictFor(hunt, f), f.t, hunt.holdMs)) completions += 1;
+    });
+    expect(completions).toBe(1);
   });
 
   it("completes 'show me three' across the dropouts a real hand produces", () => {

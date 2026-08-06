@@ -41,6 +41,13 @@ export function ChoiceButton({ choice, onPick, nudged, disabled }: ChoiceButtonP
             ))}
           </span>
         </span>
+      ) : choice.swatch ? (
+        // A colour game's answer is the colour. No picture and no word inside
+        // the button — the word is on `aria-label`, where the child who is
+        // listening rather than looking will actually meet it. The colour
+        // itself comes from CSS (`[data-colour]`), which is where the same
+        // hexes the lens accepts are written down.
+        <span className="choice-swatch" data-colour={choice.swatch} aria-hidden="true" />
       ) : choice.glyph ? (
         <Glyph name={choice.glyph} />
       ) : null}

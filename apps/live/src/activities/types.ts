@@ -24,6 +24,10 @@
 
 import type { Emote } from "@chiku/rig";
 import type { VisionFrame } from "../vision/types";
+// Type-only, so no runtime edge is added from the activities layer into the
+// components layer: `HuntColour` is the vocabulary of the colour game, and it
+// happens to live next to the lens that measures it.
+import type { HuntColour } from "../components/magicLens";
 import type { HoldVerdict } from "./hold";
 import en from "../i18n/en.json";
 import type { I18nKey, Values } from "../i18n";
@@ -54,7 +58,7 @@ export function copyKey(key: string, fallback: I18nKey): I18nKey {
   return optionalCopyKey(key) ?? fallback;
 }
 
-export type ActivityKind = "fingers" | "wave" | "smile";
+export type ActivityKind = "fingers" | "wave" | "smile" | "hunt";
 
 /** Language-neutral pictures for the tap answers. */
 export type GlyphName = "wave" | "still" | "smile" | "sad";
@@ -108,6 +112,13 @@ export interface ActivityChoice {
   /** Big numeral face (counting). Mutually exclusive with `glyph`. */
   readonly digit?: number;
   readonly glyph?: GlyphName;
+  /**
+   * A plain block of colour. The colour game's tap answer has no picture and
+   * no word in it on purpose: the swatch IS the answer, so a child who cannot
+   * read a numeral and cannot name a shape can still play. The accessible name
+   * still carries the word, for the child who is listening rather than looking.
+   */
+  readonly swatch?: HuntColour;
   /** Accessible name — kid screens are pictures, screen readers get words. */
   readonly labelKey: I18nKey;
   readonly labelValues?: Values;
@@ -134,6 +145,15 @@ export interface Activity {
    * and spent the child's slack — the tracker's uncertainty punishing them.
    */
   hasEvidence(frame: VisionFrame): boolean;
+  /**
+   * The colour this round is hunting for, when the activity is a hunt.
+   *
+   * The surface reads it to tell the lens which colour to keep, so that the
+   * thing being asked for, the thing glowing inside the window and the thing
+   * `matches` will accept are one value rather than three that agree by
+   * convention. Undefined for every other kind.
+   */
+  readonly huntColour?: HuntColour;
   readonly choices: readonly ActivityChoice[];
   /** What the right answer sounds like, in te and en. */
   readonly answers: SpokenAnswers;
@@ -171,6 +191,15 @@ export interface DemoBeat {
   readonly values?: Values;
   /** The face and trunk Chiku wears for this beat. */
   readonly emote: Emote;
+  /**
+   * Hold a block of this colour up beside Chiku for the length of the beat.
+   *
+   * The rig has no way to BE red, and "watch me" is the first rung of the
+   * ladder precisely because imitation beats instruction at three years old —
+   * so for the colour game the thing to imitate has to be visible. Chiku shows
+   * the colour himself, the child looks for one like it.
+   */
+  readonly swatch?: HuntColour;
   /** How long this beat lasts before the next one starts. */
   readonly ms: number;
 }

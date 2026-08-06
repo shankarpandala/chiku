@@ -365,3 +365,28 @@ describe("the mercy ladder copy exists in both languages", () => {
     }
   });
 });
+
+describe("the demonstration actually speaks", () => {
+  // Regression: Phase 3's "watch" rung posed Chiku correctly but said NOTHING
+  // for fingers, wave and smile — the code asked for demo.* keys that had never
+  // been written, while a parallel watch.*/together.* family sat unused. A
+  // demonstration a child cannot hear is half a demonstration.
+  const REQUIRED = [
+    "demo.count.1",
+    "demo.count.2",
+    "demo.count.3",
+    "demo.count.4",
+    "demo.count.5",
+    "demo.wave",
+    "demo.smile",
+    "demo.together",
+  ] as const;
+
+  it.each(REQUIRED)("%s exists and is non-empty in BOTH languages", (key) => {
+    for (const dict of [en, te]) {
+      const value = (dict as Record<string, string>)[key];
+      expect(value, `${key} missing`).toBeTypeOf("string");
+      expect(value?.trim().length ?? 0, `${key} empty`).toBeGreaterThan(0);
+    }
+  });
+});
