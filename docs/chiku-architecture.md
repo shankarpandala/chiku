@@ -47,6 +47,30 @@ Companion to `chiku-design-brief.md` and the Claude Design exports. This documen
 > - **§9.8 (new invariant): no vendor may be introduced on a kid surface without a
 >   written check of its terms for an under-18 clause.** Record the check in the PR.
 
+> ## Amendment (v0.3, 2026-08-06 — §9.1 was not true, VERIFIED)
+>
+> **§9.1 says "No raw audio is stored or transmitted — ever. STT happens
+> on-device; only text transits." With the browser Web Speech API that was false.**
+> Chrome's `SpeechRecognition` defaults to SERVER-side recognition: the browser
+> streams the child's audio to Google over a connection it opens itself, outside
+> our CSP and outside our process. On-device recognition only arrived in Chrome
+> 139 (Aug 2025) as an opt-in.
+> Source: https://github.com/WebAudio/web-speech-api/blob/main/explainers/on-device-speech-recognition.md
+>
+> This affects **D1** and every surface that has ever called Web Speech —
+> including `apps/web` M1–M3, which has been using the default path.
+>
+> Ruling: **on-device recognition is a gate, not a preference.**
+> - `apps/live` now probes `SpeechRecognition.available({langs, processLocally:true})`
+>   before the mic may open, sets `recognition.processLocally = true`, and reports
+>   `listener.onDevice` so the words shown to a parent can match reality. If local
+>   recognition is unavailable the mic is not offered at all.
+> - **`apps/web` still uses the default (cloud) path — outstanding debt.** It must
+>   either adopt the same gate or stop claiming on-device STT.
+> - No surface may reuse the camera's "nothing leaves this device" wording for the
+>   microphone unless `onDevice === true`. The camera claim is genuinely true
+>   (MediaPipe runs locally, CSP blocks egress); the microphone claim is not free.
+
 ## 1. What we're building (prototype scope)
 
 A single responsive web PWA where an animated character (Chiku) plays authored episodes and short live "calls," pausing at checkpoints to genuinely listen to a child (ages 3–8, Telugu + Indian English) and respond. Three surfaces from one codebase: web, mobile PWA, and TV via a **Stage & Mic** pairing pattern (TV renders the character; a paired phone is the microphone and remote).

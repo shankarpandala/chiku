@@ -33,4 +33,12 @@ export function buildRound(random: () => number = Math.random): Activity[] {
 
 export { createFingersActivity, createSmileActivity, createWaveActivity };
 export { HoldTracker, HOLD_SLACK_MS } from "./hold";
-export type { Activity, ActivityChoice, ActivityFactory, ActivityKind, GlyphName } from "./types";
+export { matchesAnswer, normalizeUtterance } from "./types";
+export type {
+  Activity,
+  ActivityChoice,
+  ActivityFactory,
+  ActivityKind,
+  GlyphName,
+  SpokenAnswers,
+} from "./types";

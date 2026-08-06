@@ -4,10 +4,26 @@
 // The threshold is deliberately generous. This is never scored (§9) — it is a
 // reason to smile at each other, not a measurement.
 
-import type { Activity, ActivityChoice, ActivityFactory } from "./types";
+import {
+  matchesAnswer,
+  type Activity,
+  type ActivityChoice,
+  type ActivityFactory,
+  type SpokenAnswers,
+} from "./types";
 
 export const SMILE_HOLD_MS = 500;
 export const SMILE_THRESHOLD = 0.45;
+
+/**
+ * A smile cannot be spoken, so the spoken answer is the word for it — a child
+ * who cannot use the camera can still name the happy face out loud, the same
+ * thing the tap answer asks them to point at.
+ */
+const SMILE_ANSWERS: SpokenAnswers = {
+  te: ["నవ్వు", "నవ్వుతున్నాను", "సంతోషం", "navvu", "navvutunnanu", "santosham", "santhosham"],
+  en: ["smile", "smiling", "happy", "happy face", "haha", "hehe"],
+};
 
 const HAPPY: ActivityChoice = {
   id: "smile-happy",
@@ -32,6 +48,8 @@ export const createSmileActivity: ActivityFactory = (random) => {
     holdMs: SMILE_HOLD_MS,
     matches: (frame) => frame.face !== null && frame.face.smile >= SMILE_THRESHOLD,
     choices: flip ? [SAD, HAPPY] : [HAPPY, SAD],
+    answers: SMILE_ANSWERS,
+    accepts: (utterance) => matchesAnswer(utterance, SMILE_ANSWERS),
   };
   return activity;
 };
