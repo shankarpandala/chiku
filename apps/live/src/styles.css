@@ -362,3 +362,58 @@ body {
     transform: none;
   }
 }
+
+/* Cloud ears — the grown-up consent block on the camera-ask screen. */
+.cloud-ears {
+  margin-top: 12px;
+  padding: 14px 18px;
+  border: 2px dashed var(--color-divider, #b8b0a0);
+  border-radius: 12px;
+  max-width: 560px;
+}
+
+.hold-button {
+  position: relative;
+  overflow: hidden;
+  font-family: var(--font-body);
+  font-size: 13px;
+  padding: 12px 20px;
+  min-height: 48px;
+  border: 1px solid var(--color-divider, #b8b0a0);
+  border-radius: 8px;
+  background: var(--color-surface, #eae9e9);
+  color: var(--color-text, #201e1d);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.hold-button-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--color-accent-200, #ffe0d9);
+  transition: width 50ms linear;
+}
+
+.hold-button-label {
+  position: relative;
+}
+
+.cloud-note {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+/* Counting dots under digit chips — a pre-reader counts, nobody reads. */
+.choice-dots {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.choice-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--kid-chiku-dark);
+}

@@ -113,6 +113,8 @@ const voice = vi.hoisted(() => {
     starts: [] as string[],
     stops: 0,
     listening: false,
+    /** One entry per createListener call — the surface's permission model. */
+    listenerOpts: [] as Array<{ allowCloudRecognition?: boolean }>,
   };
 
   const resultCbs = new Set<(r: HeardResult) => void>();
@@ -158,7 +160,8 @@ const voice = vi.hoisted(() => {
       return state.onDevice;
     },
     async ensureOnDevice(): Promise<boolean> {
-      return state.onDevice !== false;
+      const cloudAccepted = state.listenerOpts[state.listenerOpts.length - 1]?.allowCloudRecognition === true;
+      return state.onDevice !== false || cloudAccepted;
     },
     get listening(): boolean {
       return state.listening;
@@ -228,6 +231,8 @@ const voice = vi.hoisted(() => {
       state.starts = [];
       state.stops = 0;
       state.listening = false;
+      state.onDevice = true;
+      state.listenerOpts = [];
     },
   };
 });
@@ -240,7 +245,10 @@ vi.mock("../src/voice", async (importOriginal) => {
   return {
     ...actual,
     createSpeaker: () => voice.speaker,
-    createListener: () => voice.listener,
+    createListener: (opts?: { allowCloudRecognition?: boolean }) => {
+      voice.state.listenerOpts.push(opts ?? {});
+      return voice.listener;
+    },
   };
 });
 
@@ -697,5 +705,101 @@ describe("no microphone is not a dead end", () => {
 
     expect(action("talk.hold")).toBeNull();
     expect(text()).toContain("Chiku's ears do not work on this device");
+  });
+});
+
+describe("cloud ears — the parent's deliberate choice (doc v0.3)", () => {
+  // Verified on the real target machine: Chrome 151/macOS answers "unavailable"
+  // for on-device speech in EVERY language, so without this path the mic is
+  // simply dead. The show may never choose cloud on its own; a grown-up may.
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("with no local speech and no consent: no talk button, honest note instead", async () => {
+    voice.state.onDevice = false;
+    await enterPlaying(true);
+    await flush();
+    expect(container.querySelector(".talk-btn")).toBeNull();
+    expect(text()).toContain("Chiku's ears do not work on this device");
+    // And nothing asked the listener for cloud recognition.
+    expect(voice.state.listenerOpts.every((o) => o.allowCloudRecognition !== true)).toBe(true);
+  });
+
+  it("the consent block appears on the camera-ask screen when local speech is missing", async () => {
+    voice.state.onDevice = false;
+    mount();
+    click(action("welcome.begin"));
+    await flush();
+    expect(container.querySelector(".cloud-ears")).not.toBeNull();
+    expect(text()).toContain("internet ears");
+  });
+
+  it("holding the toggle for 2s rebuilds the listener with cloud accepted and shows the talk button", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance"] });
+    try {
+      voice.state.onDevice = false;
+      mount();
+      click(action("welcome.begin"));
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const hold = container.querySelector(".hold-button");
+      expect(hold).not.toBeNull();
+      act(() => {
+        hold!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(2100);
+      });
+
+      // Persisted for next launch, and the listener was rebuilt with the flag.
+      expect(window.localStorage.getItem("chiku.live.cloudEars.v1")).toBe("true");
+      expect(voice.state.listenerOpts.at(-1)?.allowCloudRecognition).toBe(true);
+
+      // The child surface now offers the mic — with the honesty tag.
+      const allow = action("camera.allow");
+      await act(async () => {
+        allow?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(50);
+        await Promise.resolve();
+      });
+      expect(container.querySelector(".talk-btn")).not.toBeNull();
+      expect(text()).toContain("Chiku's ears use the internet");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("releasing the hold early does NOT flip the choice", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance"] });
+    try {
+      voice.state.onDevice = false;
+      mount();
+      click(action("welcome.begin"));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const hold = container.querySelector(".hold-button");
+      act(() => {
+        hold!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(900); // less than half the hold
+      });
+      act(() => {
+        hold!.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(window.localStorage.getItem("chiku.live.cloudEars.v1")).toBeNull();
+      expect(voice.state.listenerOpts.at(-1)?.allowCloudRecognition).not.toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -31,8 +31,15 @@ export function ChoiceButton({ choice, onPick, nudged, disabled }: ChoiceButtonP
       data-choice={choice.id}
     >
       {choice.digit !== undefined ? (
+        // Numeral + the same count as dots: a pre-reader counts the dots, an
+        // older child reads the digit, and nobody has to read a word.
         <span className="choice-digit" aria-hidden="true">
           {choice.digit}
+          <span className="choice-dots">
+            {Array.from({ length: choice.digit }, (_, i) => (
+              <span key={i} className="choice-dot" />
+            ))}
+          </span>
         </span>
       ) : choice.glyph ? (
         <Glyph name={choice.glyph} />
