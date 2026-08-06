@@ -44,13 +44,32 @@ import { TalkButton } from "../../components/TalkButton";
 import { useReducedMotion } from "../../components/useReducedMotion";
 import { translate, useI18n, type I18nKey, type Lang, type Values } from "../../i18n";
 import { buildRound, HoldTracker, type Activity, type ActivityChoice } from "../../activities";
-import { randInt, verdictFor } from "../../activities/types";
+import {
+  alongsideBeatsFor,
+  copyKey,
+  demoBeatsFor,
+  optionalCopyKey,
+  randInt,
+  verdictFor,
+  type DemoBeat,
+} from "../../activities/types";
+import {
+  assistAfterMiss,
+  praiseToneFor,
+  relaxFor,
+  type AssistLevel,
+  type PraiseTone,
+  type Relaxation,
+} from "../../activities/assist";
 import { createVisionEngine } from "../../vision/engine";
+import { getCalibration } from "../../vision/calibration";
+import { relaxThresholds } from "../../vision/fingers";
 import type { VisionEngine, VisionFrame, VisionStatus } from "../../vision/types";
 import { createListener, createSpeaker, isMicUnusable } from "../../voice";
 import { getCloudEars, setCloudEars } from "../../settings/cloudEars";
 import { GROWNUP_OPEN_HOLD_MS, HoldButton } from "../../components/HoldButton";
 import { GrownUpSheet } from "../../components/GrownUpSheet";
+import { HoldRing } from "../../components/HoldRing";
 import { SunArc } from "../../components/SunArc";
 import { getLimitMinutes, SESSION_TICK_MS, SessionClock, setLimitMinutes } from "../../session/cap";
 import { warmVision } from "../../session/warmup";
@@ -66,13 +85,70 @@ export type MicMode = "unknown" | "ready" | "off";
  */
 export type WarmState = "idle" | "warming" | "ready" | "failed";
 type RoundState = "prompt" | "praise";
+/**
+ * Where a miss came from. Only "child" is proof that anybody is in the room —
+ * a timeout is equally consistent with a phone on a sofa.
+ */
+type MissSource = "timeout" | "child";
 
 /** How long the praise stays up before the next prompt. */
 const PRAISE_MS = 2200;
-/** How long a child may work on a prompt before Chiku offers the tap answer. */
+/** How long a child may work on a prompt before Chiku steps down a rung. */
 const ASSIST_AFTER_MS = 8000;
 
+/**
+ * Room for the warm nudge to be heard before Chiku starts demonstrating over
+ * the top of himself. Not the length of the sentence — a stuck three-year-old
+ * will not wait out a full sentence, and the nudge is on screen regardless.
+ */
+const DEMO_LEAD_MS = 1500;
+
+/** How long "let's do it together!" sits before the counting-along starts. */
+const TOGETHER_LEAD_MS = 700;
+
+/** After counting along, a beat of nothing, and then the round succeeds. */
+const TOGETHER_SETTLE_MS = 400;
+
 const PRAISES: readonly I18nKey[] = ["praise.one", "praise.two", "praise.three"];
+
+/** Most lines one praise bucket may hold. Missing ones are simply not there. */
+const PRAISE_BUCKET_MAX = 6;
+
+/**
+ * Praise, bucketed by how hard the win was.
+ *
+ * Key shape, agreed with the copy change landing beside this one:
+ * `praise.light.1…n`, `praise.warm.1…n`, `praise.effort.1…n`, picked from at
+ * random within the bucket. Any bucket the dictionary does not carry yet falls
+ * back to the three original lines, so this file behaves exactly as it did
+ * before the buckets exist and improves the moment they land.
+ *
+ * `effort` copy must name the EFFORT and not the child — "you kept trying!",
+ * never "clever girl" (Gunderson/Dweck; see `assist.ts`).
+ */
+function praiseBucket(tone: PraiseTone): readonly I18nKey[] {
+  const found: I18nKey[] = [];
+  for (let i = 1; i <= PRAISE_BUCKET_MAX; i += 1) {
+    const key = optionalCopyKey(`praise.${tone}.${i}`);
+    if (key) found.push(key);
+  }
+  return found.length > 0 ? found : PRAISES;
+}
+
+const PRAISE_BUCKETS: Readonly<Record<PraiseTone, readonly I18nKey[]>> = {
+  light: praiseBucket("light"),
+  warm: praiseBucket("warm"),
+  effort: praiseBucket("effort"),
+};
+
+/**
+ * "Let's do it together!" — the bottom rung, spoken as an invitation.
+ *
+ * Falls back to `praise.nudge` ("Nearly! Let's try that one together."), which
+ * already exists in both dictionaries and already says the right thing, so
+ * this rung is never mute even before the new copy lands.
+ */
+const TOGETHER_KEY: I18nKey = copyKey("demo.together", "praise.nudge");
 
 /**
  * Capabilities the vision engine and the speaker are expected to grow but may
@@ -88,6 +164,14 @@ type MaybeVoicedSpeaker = Speaker & {
   /** False when synthesis exists but has no voice for this language. */
   hasVoice?: (lang: VoiceLang) => boolean;
 };
+
+/** A line held back while the microphone was open. See `say`. */
+interface PendingLine {
+  readonly key: I18nKey;
+  readonly values: Values | undefined;
+  readonly speaking: Emote;
+  readonly rest: Emote;
+}
 
 export interface LiveProps {
   /** Test seam — defaults to the real live rig. */
@@ -131,8 +215,44 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const [index, setIndex] = useState(0);
   const [roundState, setRoundState] = useState<RoundState>("prompt");
   const [praiseKey, setPraiseKey] = useState<I18nKey>("praise.one");
-  /** Tap answers are on screen (always, with no camera; after a while, with one). */
+  /**
+   * How hard the win was. On the element so the celebration can be dressed
+   * differently for a win that cost the child something — and so the choice is
+   * checkable from outside, which a random pick from a bucket otherwise is not.
+   */
+  const [praiseTone, setPraiseTone] = useState<PraiseTone>("light");
+  /** Tap answers are on screen (always, with no camera; after a miss, with one). */
   const [assist, setAssist] = useState(false);
+  /**
+   * How much help this PROMPT is getting. Reset in `beginPrompt`, not per
+   * round: a child who needed carrying through "show me three" starts the next
+   * activity fresh, because the next activity is a different thing to be
+   * stuck on and starting it pre-helped would be its own small verdict.
+   */
+  const [assistLevel, setAssistLevel] = useState<AssistLevel>("none");
+  const assistLevelRef = useRef<AssistLevel>("none");
+  /** Misses on this prompt: timeouts, wrong taps and misheard answers alike. */
+  const attemptsRef = useRef(0);
+  /**
+   * How far into the hold the child is, 0..1, for the counting ring.
+   * Quantised to 1/50 before it reaches state: the raw value changes every
+   * camera frame and committing React ~30x/s is exactly what `applyFrame`
+   * stays imperative to avoid.
+   */
+  const [holdProgress, setHoldProgress] = useState(0);
+  /**
+   * Has anybody actually done anything this visit — a tap, a word?
+   *
+   * The bottom rung carries the child to success on timeouts alone, which is
+   * right for a three-year-old sitting there stuck and wrong for a phone left
+   * face-up on a sofa. With a camera, `attending` answers this. Without one
+   * there is no presence signal at all, so a single tap or word anywhere in
+   * the visit stands in for it. Chiku does not celebrate an empty room, and he
+   * does not nag one every eight seconds either.
+   */
+  const interactedRef = useRef(false);
+  /** The detector relaxation currently in force. See activities/assist.ts. */
+  const relaxRef = useRef<Relaxation>(relaxFor("none"));
   /** The warm retry line is showing. Never a failure, just a nudge. */
   const [nudge, setNudge] = useState(false);
   const [nudgedId, setNudgedId] = useState<string | null>(null);
@@ -190,6 +310,9 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
 
   // --- voice ---------------------------------------------------------------
 
+  /** A line Chiku wanted to say while the mic was open. At most one — the newest. */
+  const pendingSayRef = useRef<PendingLine | null>(null);
+
   /** Shut Chiku up right now and give the jaw back to the camera. */
   const hush = useCallback((): void => {
     speakHandleRef.current = null;
@@ -208,15 +331,26 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
    * CHIKU DOES NOT TALK WHILE THE MIC IS OPEN. Barge-in stops him when the
    * child starts; this is the other half of the same manners, and it also
    * keeps his own voice out of the recogniser — which would otherwise come
-   * straight back as a wrong answer, and prompt another line, and loop. Every
-   * caller that legitimately speaks after a turn (praise, goodbye) closes the
-   * mic first; anything left suppressed here is Chiku correctly waiting his
-   * turn, and its text is on screen regardless.
+   * straight back as a wrong answer, and prompt another line, and loop.
+   *
+   * BUT WAITING HIS TURN IS NOT THE SAME AS SWALLOWING THE LINE. This
+   * demographic holds the big teal button constantly — it lights up, so it is
+   * a toy — and a suppressed line used to be gone: the child heard no prompt,
+   * no nudge and, worst of all, no praise. So the newest suppressed line is
+   * kept and spoken when the mic closes. Only the newest: an older line that
+   * has been overtaken by a newer one is stale by definition, and Chiku
+   * catching up on three sentences at once is a monologue, not a turn.
    */
   const say = useCallback(
     (key: I18nKey, values: Values | undefined, speaking: Emote, rest: Emote): void => {
       const speaker: MaybeVoicedSpeaker | null = speakerRef.current;
-      if (!speaker?.available || listeningRef.current) return;
+      if (!speaker?.available) return;
+      if (listeningRef.current) {
+        pendingSayRef.current = { key, values, speaking, rest };
+        return;
+      }
+      // Actually saying something supersedes anything queued behind it.
+      pendingSayRef.current = null;
       // A synthesiser with no voice INSTALLED for this language does not stay
       // silent — it substitutes another one, and Chiku reads Telugu in an
       // American accent. Skipping the line leaves the written text, which is
@@ -252,11 +386,33 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const sayRef = useRef(say);
   sayRef.current = say;
 
+  /**
+   * Speak whatever Chiku swallowed while the mic was open, if it is still the
+   * newest thing he had to say. A no-op when nothing was held back, which is
+   * the overwhelmingly common case.
+   */
+  const flushSay = useCallback((): void => {
+    const pending = pendingSayRef.current;
+    if (!pending || listeningRef.current) return;
+    pendingSayRef.current = null;
+    say(pending.key, pending.values, pending.speaking, pending.rest);
+  }, [say]);
+
   /** The one writer of "is the mic open" — ref first, so callbacks agree. */
-  const markListening = useCallback((on: boolean): void => {
-    listeningRef.current = on;
-    setListening(on);
-  }, []);
+  const markListening = useCallback(
+    (on: boolean): void => {
+      listeningRef.current = on;
+      setListening(on);
+      // The mic just closed, so Chiku's turn has come round. On a tick rather
+      // than inline: a caller that closes the mic and then says its own line in
+      // the same breath — praise, goodbye — must supersede the queued one
+      // rather than race it, and `say` clears the queue when it speaks.
+      if (!on) later(flushSay, 0);
+    },
+    [flushSay, later],
+  );
+  const markListeningRef = useRef(markListening);
+  markListeningRef.current = markListening;
 
   /**
    * Close the mic. Idempotent, and called from more directions than there are
@@ -268,6 +424,163 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     markListening(false);
   }, [markListening]);
 
+  // --- the assist ladder ----------------------------------------------------
+  //
+  // THE PROBLEM THIS REPLACES. A child who could not show three fingers was
+  // offered, after eight seconds, a row of numerals to tap — which is the SAME
+  // COGNITIVE TASK. "Pick the 3" is not an easier door than "show me 3"; for a
+  // three-year-old it is often a harder one. So the surface's own rule —
+  // rounds end in praise — was unreachable for exactly the children who most
+  // needed it to be true, and the only exits left were a timeout loop or a
+  // grown-up. The ladder escalates TOWARD the answer instead:
+  //
+  //   watch     Chiku does it himself and asks again.
+  //   easier    The detector quietly loosens. Nobody says so.
+  //   together  Chiku does it alongside the child, and the round succeeds.
+  //
+  // There is no rung below "together" and no failure exit from it.
+
+  // Forward references, so the ladder can call the things defined below it
+  // without a dependency cycle between the callbacks.
+  const succeedRef = useRef<() => void>(() => {});
+  const registerMissRef = useRef<(source: MissSource) => void>(() => {});
+
+  /** Put the relaxation for `level` into force. */
+  const applyAssist = useCallback((level: AssistLevel): void => {
+    const relax = relaxFor(level);
+    relaxRef.current = relax;
+    holdRef.current.relax(relax.extraSlackFrames);
+    // The angle half. Always computed from the STORED per-child calibration
+    // rather than from whatever is currently in force, so the rungs never
+    // compound: "easier" then "together" is 14deg off the child's own baseline,
+    // not 8 + 14, and going back up to "none" restores that baseline exactly.
+    // Landing before the camera opens is fine — the engine keeps it.
+    engineRef.current?.setCalibration(relaxThresholds(getCalibration(), relax.angleRelaxDeg));
+  }, []);
+
+  /**
+   * How long the hold must last right now: the activity's own figure, scaled
+   * by the rung. Anything that draws a hold progress cue must use this and not
+   * `activity.holdMs`, or the ring will finish somewhere other than the hold.
+   */
+  const holdMsFor = useCallback(
+    (current: Activity): number =>
+      Math.max(1, Math.round(current.holdMs * relaxRef.current.holdScale)),
+    [],
+  );
+
+  /** Start the clock on "still working on it?". Re-armed after every rung. */
+  const armMissTimer = useCallback((): void => {
+    later(() => {
+      if (roundStateRef.current !== "prompt") return;
+      registerMissRef.current("timeout");
+    }, ASSIST_AFTER_MS);
+  }, [later]);
+
+  /**
+   * Play a short performance: a pose per beat, a line on the beats that have
+   * one, and `done` at the end. Every beat re-checks that the round is still
+   * running, so a child who answers halfway through is never talked over by a
+   * demonstration of the thing they just did.
+   */
+  const runDemo = useCallback(
+    (beats: readonly DemoBeat[], startAfterMs: number, done: () => void): void => {
+      let at = startAfterMs;
+      for (const beat of beats) {
+        const when = at;
+        later(() => {
+          if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
+          setEmote(beat.emote);
+          if (beat.key) say(beat.key, beat.values, beat.emote, beat.emote);
+        }, when);
+        at += beat.ms;
+      }
+      later(() => {
+        if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
+        done();
+      }, at);
+    },
+    [later, say, setEmote],
+  );
+
+  /**
+   * One miss — a timeout, a wrong tap, or a heard-but-wrong answer. They are
+   * the same event on purpose: from the child's side all three are "I tried
+   * and Chiku did not say yes", and treating a wrong tap as cheaper than a
+   * timeout would leave the child who taps wrong three times exactly where
+   * this whole change exists to rescue them from.
+   */
+  const registerMiss = useCallback((source: MissSource): void => {
+    if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
+    const current = roundRef.current[indexRef.current];
+    if (!current) return;
+
+    // Cancels the miss timer and any demonstration still playing, so two rungs
+    // can never run over the top of each other.
+    clearTimers();
+
+    // The first miss buys a free retry at the same rung (see assistAfterMiss):
+    // a child who was merely slow should not be shown how before they have had
+    // a second go, and it is what makes an unhelped-but-hard-won win possible.
+    const level = assistAfterMiss(assistLevelRef.current, attemptsRef.current + 1);
+    // THE ONE THING THE LADDER WILL NOT DO IS CARRY AN EMPTY ROOM. The bottom
+    // rung ends in praise on its own, and a device left face-up on a sofa must
+    // not be congratulated — nor nagged every eight seconds until the session
+    // cap. A tap, a word, or a face in the camera is enough to believe someone
+    // is there; with none of the three, Chiku holds this rung, asks once more
+    // and then waits quietly. A child who comes back and touches anything is
+    // straight back on the ladder, one rung further down.
+    const present = source === "child" || attendingRef.current || interactedRef.current;
+    if (level === "together" && !present) {
+      setAssist(true);
+      setNudge(true);
+      setEmote("encouraging");
+      say(current.retryKey, undefined, "encouraging", "listening");
+      return;
+    }
+
+    attemptsRef.current += 1;
+    assistLevelRef.current = level;
+    setAssistLevel(level);
+    applyAssist(level);
+    // A fresh attempt starts from a clean hold; the relaxation above survives.
+    holdRef.current.reset();
+
+    // The tap answers appear on the first miss and stay. They are no longer
+    // the escalation — they are not an easier question — but they are a real
+    // door for a child who would rather point, and taking it away would be a
+    // loss with nothing bought.
+    setAssist(true);
+    setNudge(true);
+    setEmote("encouraging");
+
+    if (level === "together") {
+      // The bottom rung. Chiku invites, counts along, and the round SUCCEEDS —
+      // doing a thing with help is how children learn to do it alone, and the
+      // celebration for it is real, not a consolation.
+      say(TOGETHER_KEY, undefined, "encouraging", "listening");
+      const beats: readonly DemoBeat[] = [
+        ...alongsideBeatsFor(current),
+        { emote: "happy", ms: TOGETHER_SETTLE_MS },
+      ];
+      runDemo(beats, TOGETHER_LEAD_MS, () => succeedRef.current());
+      return;
+    }
+
+    // "watch" and "easier" both open with the warm nudge, spoken now so it is
+    // the first thing heard rather than queued behind a performance.
+    say(current.retryKey, undefined, "encouraging", "listening");
+    if (level === "watch") {
+      // Show, then ask again — `demoBeatsFor` supplies the re-ask, and is just
+      // the re-ask for an activity with no demonstration of its own.
+      runDemo(demoBeatsFor(current), DEMO_LEAD_MS, armMissTimer);
+      return;
+    }
+    // "easier": nothing to see. The bar moved and the child is not told.
+    armMissTimer();
+  }, [applyAssist, armMissTimer, clearTimers, runDemo, say, setEmote]);
+  registerMissRef.current = registerMiss;
+
   // --- round flow ----------------------------------------------------------
 
   const beginPrompt = useCallback((): void => {
@@ -276,6 +589,13 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     setRoundState("prompt");
     setNudge(false);
     setNudgedId(null);
+    // A new prompt is a new thing to be stuck on: the ladder starts at the top
+    // and the detector goes back to strict.
+    assistLevelRef.current = "none";
+    setAssistLevel("none");
+    attemptsRef.current = 0;
+    setHoldProgress(0);
+    applyAssist("none");
     // No camera → the tap answers ARE the game, so they are there immediately.
     setAssist(cameraModeRef.current !== "on");
     setEmote("listening");
@@ -284,16 +604,8 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     // only worked if a grown-up was narrating.
     const opening = roundRef.current[indexRef.current];
     if (opening) say(opening.promptKey, opening.promptValues, "encouraging", "listening");
-    later(() => {
-      // Still working on it? Offer the other way in, warmly.
-      if (roundStateRef.current !== "prompt") return;
-      setAssist(true);
-      setNudge(true);
-      setEmote("encouraging");
-      const current = roundRef.current[indexRef.current];
-      if (current) say(current.retryKey, undefined, "encouraging", "listening");
-    }, ASSIST_AFTER_MS);
-  }, [later, say, setEmote]);
+    armMissTimer();
+  }, [applyAssist, armMissTimer, say, setEmote]);
 
   const goGoodbye = useCallback((): void => {
     clearTimers();
@@ -356,7 +668,16 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     setNudge(false);
     setNudgedId(null);
     setStreak((s) => s + 1);
-    const praise = PRAISES[randInt(random, 0, PRAISES.length - 1)] ?? "praise.one";
+    // PRAISE IS CHOSEN BY EFFORT, NOT BY OUTCOME. It used to be a coin toss
+    // between three interchangeable cheers, which meant the easiest win got
+    // the loudest one — backwards, and the way software usually gets it wrong.
+    // An instant win gets a light acknowledgement; the child who needed three
+    // goes and Chiku's help gets the real celebration, and that celebration
+    // names the effort rather than the child.
+    const tone = praiseToneFor(assistLevelRef.current, attemptsRef.current);
+    const bucket = PRAISE_BUCKETS[tone];
+    const praise = bucket[randInt(random, 0, bucket.length - 1)] ?? "praise.one";
+    setPraiseTone(tone);
     setPraiseKey(praise);
     setEmote("happy");
     stageRef.current?.blink();
@@ -365,6 +686,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     say(praise, undefined, "happy", "happy");
     later(advance, PRAISE_MS);
   }, [advance, clearTimers, closeMic, later, random, say, setEmote]);
+  succeedRef.current = succeed;
 
   const startPlaying = useCallback((): void => {
     clearTimers();
@@ -372,6 +694,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
     // one resumes it if a hidden tab paused it.
     clockRef.current.start();
     setSessionProgress(clockRef.current.progress(limitRef.current));
+    interactedRef.current = false;
     const next = buildRound(random);
     roundRef.current = next;
     setRound(next);
@@ -402,10 +725,23 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       const activity = roundRef.current[indexRef.current];
       if (!activity) return;
       // Tri-state: a frame that could not answer the question is "unknown" and
-      // costs the child nothing. See activities/hold.ts.
-      if (holdRef.current.update(verdictFor(activity, frame), frame.t, activity.holdMs)) succeed();
+      // costs the child nothing. See activities/hold.ts. The hold length is the
+      // activity's, scaled by whatever rung of the ladder we are on.
+      const holdMs = holdMsFor(activity);
+      if (holdRef.current.update(verdictFor(activity, frame), frame.t, holdMs)) {
+        setHoldProgress(0);
+        succeed();
+        return;
+      }
+      // Chiku visibly counting. Without this the child holds three fingers up,
+      // sees nothing happen, and gets nudged as though they had done nothing —
+      // `progress()` existed for this cue and nothing had ever called it.
+      // holdMsFor, not activity.holdMs: on a relaxed rung the ring must finish
+      // when the hold actually completes, not later.
+      const p = holdRef.current.progress(frame.t, holdMs);
+      setHoldProgress(Math.round(p * 50) / 50);
     },
-    [succeed],
+    [holdMsFor, succeed],
   );
 
   // Latest-handler refs: the engine subscription is set up exactly once, but
@@ -431,21 +767,22 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       if (phaseRef.current !== "playing" || roundStateRef.current !== "prompt") return;
       const activity = roundRef.current[indexRef.current];
       if (!activity) return;
+      // Somebody said something. Whatever it was, there is a child here.
+      interactedRef.current = true;
       if (activity.accepts(result.text)) {
         succeed();
         return;
       }
-      // Heard something, but not the answer. Same warm nudge a wrong tap gets,
-      // plus the tap answers, because a child who is being misheard needs a
-      // door that does not depend on being heard.
-      setNudge(true);
-      setAssist(true);
-      setEmote("encouraging");
-      // Spoken only if the child has already let go — `say` will not talk into
-      // an open mic. The written nudge is there either way.
-      say(activity.retryKey, undefined, "encouraging", "listening");
+      // Heard something, but not the answer — one rung down, same as a timeout
+      // or a wrong tap. A child who is being misheard is a child who is
+      // trying, and the ladder is what turns trying into succeeding.
+      //
+      // Spoken lines are held while the button is still down; `say` queues the
+      // newest and speaks it the moment the mic closes. The written nudge is
+      // on screen either way.
+      registerMiss("child");
     },
-    [say, setEmote, succeed],
+    [registerMiss, succeed],
   );
 
   const heardHandlerRef = useRef(handleHeard);
@@ -578,18 +915,21 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
       if (!mountedRef.current) return;
       heardHandlerRef.current(result);
     });
+    // Both of these go through `markListening`, not through the two setters,
+    // so a mic that closes on its own — a recogniser timing out, a permission
+    // withdrawn — releases the line Chiku was holding back exactly as a
+    // released button does. This is the common case, not the exotic one: the
+    // platform ends the session by itself all the time.
     const offError = listener.onError((message) => {
       if (!mountedRef.current) return;
-      listeningRef.current = false;
-      setListening(false);
+      markListeningRef.current(false);
       // Only a real refusal removes the button; `no-speech` is just silence,
       // and deleting the control under a child who paused would be a lie.
       if (isMicUnusable(message)) setMicMode("off");
     });
     const offEnd = listener.onEnd(() => {
       if (!mountedRef.current) return;
-      listeningRef.current = false;
-      setListening(false);
+      markListeningRef.current(false);
     });
 
     // Chiku says hello the moment he is on screen, so the very first thing a
@@ -805,19 +1145,20 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const pickChoice = useCallback(
     (choice: ActivityChoice): void => {
       if (roundStateRef.current !== "prompt") return;
+      // A finger on the glass is a child in the room.
+      interactedRef.current = true;
       if (choice.correct) {
         succeed();
         return;
       }
-      // Wrong tap: a wobble and the retry line. Nothing red, nothing lost.
+      // Wrong tap: a wobble, and one rung down the ladder. Nothing red,
+      // nothing lost, and — unlike before — something that actually changes,
+      // so the fourth wrong tap is not the same experience as the first.
+      registerMiss("child");
       setNudgedId(choice.id);
-      setNudge(true);
-      setEmote("encouraging");
-      const activity = roundRef.current[indexRef.current];
-      if (activity) say(activity.retryKey, undefined, "encouraging", "listening");
       later(() => setNudgedId(null), 700);
     },
-    [later, say, setEmote, succeed],
+    [later, registerMiss, succeed],
   );
 
   // --- render --------------------------------------------------------------
@@ -827,7 +1168,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
   const cameraRefused = status === "denied" || status === "unavailable" || status === "error";
 
   return (
-    <main className="live" data-phase={phase} data-camera={cameraMode}>
+    <main className="live" data-phase={phase} data-camera={cameraMode} data-assist={assistLevel}>
       <CameraStage
         ref={stageRef}
         cameraOn={cameraOn}
@@ -842,6 +1183,9 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
             <Bilingual k={attending ? "stage.seesYou" : "stage.lookingForYou"} inline />
           </p>
         )}
+        {/* Marigold, never teal — teal means "Chiku is hearing you" and this is
+            him counting. Renders null at zero, so no guard is needed here. */}
+        <HoldRing progress={holdProgress} label={tIn(lang, "hold.counting")} />
       </CameraStage>
 
       {/* One prompt at a time, announced: a child with a screen reader gets the
@@ -935,7 +1279,7 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
         {phase === "playing" && activity && (
           <>
             {roundState === "praise" ? (
-              <p className="live-praise" role="status">
+              <p className="live-praise" role="status" data-praise-tone={praiseTone}>
                 <Bilingual k={praiseKey} />
               </p>
             ) : (

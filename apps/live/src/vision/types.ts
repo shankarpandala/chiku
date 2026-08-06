@@ -6,6 +6,8 @@
 // frame, a landmark, or any derived image data. Inference is on-device; the
 // only thing that ever leaves `vision/` is the small structured summary below.
 
+import type { VisionCalibration } from "./calibration";
+
 /** Normalized gaze/attention derived from the face. */
 export interface FaceSignal {
   /** Face centre in normalized screen space: -1 (left) … +1 (right). */
@@ -79,6 +81,22 @@ export interface VisionEngine {
   /** Requests the camera and starts inference. Resolves once running. */
   start(video: HTMLVideoElement): Promise<void>;
   stop(): void;
+  /**
+   * Swap the finger thresholds the next frame is scored against.
+   *
+   * This is how the assist ladder's "easier" and "together" rungs relax the
+   * ANGLES (the hold half lives in the surface). It takes effect on the next
+   * frame — no camera restart, no model reload, nothing the child can see or
+   * hear happening — because being visibly handed an easier version is a small
+   * humiliation and they did not ask for one.
+   *
+   * Callable in any state, including before `start()` and after `stop()`: the
+   * surface sets a rung whenever the rung changes and cannot be expected to
+   * know whether the camera happens to be open. An explicit call also OUTRANKS
+   * the stored per-child calibration that `start()` would otherwise re-read,
+   * so a rung set before the camera opens is still in force once it does.
+   */
+  setCalibration(next: VisionCalibration): void;
   onFrame(cb: (frame: VisionFrame) => void): () => void;
   onStatus(cb: (status: VisionStatus, detail?: string) => void): () => void;
   dispose(): void;

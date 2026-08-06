@@ -39,12 +39,31 @@ export {
   HOLD_UNKNOWN_FRAMES,
   type HoldVerdict,
 } from "./hold";
-export { matchesAnswer, normalizeUtterance, verdictFor } from "./types";
+export {
+  alongsideBeatsFor,
+  copyKey,
+  demoBeatsFor,
+  DEMO_ASK_MS,
+  matchesAnswer,
+  normalizeUtterance,
+  optionalCopyKey,
+  verdictFor,
+} from "./types";
 export type {
   Activity,
   ActivityChoice,
   ActivityFactory,
   ActivityKind,
+  DemoBeat,
   GlyphName,
   SpokenAnswers,
 } from "./types";
+export {
+  ASSIST_LADDER,
+  nextAssist,
+  praiseToneFor,
+  relaxFor,
+  type AssistLevel,
+  type PraiseTone,
+  type Relaxation,
+} from "./assist";

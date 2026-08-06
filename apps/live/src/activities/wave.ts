@@ -6,13 +6,21 @@
 
 import {
   matchesAnswer,
+  optionalCopyKey,
   type Activity,
   type ActivityChoice,
   type ActivityFactory,
+  type DemoBeat,
   type SpokenAnswers,
 } from "./types";
 
 export const WAVE_HOLD_MS = 300;
+
+/** One swing of the trunk. Two of them read as a wave; one reads as a pose. */
+export const WAVE_BEAT_MS = 420;
+
+/** "Look — hello, hello!". Silent if the copy has not landed yet. */
+const DEMO_WAVE_KEY = optionalCopyKey("demo.wave");
 
 /**
  * Waving is a greeting, so the spoken answer is the greeting itself — a child
@@ -53,6 +61,15 @@ export const createWaveActivity: ActivityFactory = (random) => {
     choices: flip ? [STILL, WAVING] : [WAVING, STILL],
     answers: WAVE_ANSWERS,
     accepts: (utterance) => matchesAnswer(utterance, WAVE_ANSWERS),
+    // Chiku waves. `goodbye` is the rig's raised-trunk wave pose (design
+    // contract, 2026-08-05) — reused here rather than invented, because the
+    // sheet has exactly one wave and a second one would drift from it. The
+    // swing out and back is what makes it read as waving instead of saluting.
+    demonstrate: (): readonly DemoBeat[] => [
+      { ...(DEMO_WAVE_KEY ? { key: DEMO_WAVE_KEY } : {}), emote: "goodbye", ms: WAVE_BEAT_MS },
+      { emote: "encouraging", ms: WAVE_BEAT_MS / 2 },
+      { emote: "goodbye", ms: WAVE_BEAT_MS },
+    ],
   };
   return activity;
 };

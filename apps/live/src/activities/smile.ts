@@ -7,13 +7,21 @@
 import { HysteresisGate, type Hysteresis } from "../vision/stability";
 import {
   matchesAnswer,
+  optionalCopyKey,
   type Activity,
   type ActivityChoice,
   type ActivityFactory,
+  type DemoBeat,
   type SpokenAnswers,
 } from "./types";
 
 export const SMILE_HOLD_MS = 500;
+
+/** Long enough to be a smile Chiku is holding, short enough not to be a stare. */
+export const SMILE_BEAT_MS = 1000;
+
+/** "A big smile — like this!". Silent if the copy has not landed yet. */
+const DEMO_SMILE_KEY = optionalCopyKey("demo.smile");
 
 /**
  * Smile strength that starts counting as a smile. Unchanged — the acquire side
@@ -73,6 +81,12 @@ export const createSmileActivity: ActivityFactory = (random) => {
     choices: flip ? [SAD, HAPPY] : [HAPPY, SAD],
     answers: SMILE_ANSWERS,
     accepts: (utterance) => matchesAnswer(utterance, SMILE_ANSWERS),
+    // The one activity whose demonstration is the reward: Chiku smiles first.
+    // Smiling back at a smiling face is close to involuntary at this age, which
+    // makes this the single most reliable rung on the whole ladder.
+    demonstrate: (): readonly DemoBeat[] => [
+      { ...(DEMO_SMILE_KEY ? { key: DEMO_SMILE_KEY } : {}), emote: "happy", ms: SMILE_BEAT_MS },
+    ],
   };
   return activity;
 };
