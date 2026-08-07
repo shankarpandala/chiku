@@ -141,6 +141,7 @@ function makeRigSpy(): RigSpy {
         node.setAttribute("data-attention", String(on));
       },
       blink() {},
+      perform: () => Promise.resolve(),
       debug: () => ({ gazeX: 0, gazeY: 0, mouthOpen: 0, emote: "idle" }),
       dispose() {
         node.remove();

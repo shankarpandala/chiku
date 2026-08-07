@@ -867,3 +867,243 @@ body {
   border-radius: 50%;
   background: var(--kid-chiku-dark);
 }
+
+/* ==========================================================================
+   TODDLER MODE
+   ==========================================================================
+
+   A different room, and it looks different on purpose. The 3-8 surface is a
+   video call: the child large in frame, Chiku beside them, a prompt and a row
+   of answers underneath. Toddler mode has no answers, no prompt in the
+   instruction sense and no round — it has ONE BIG ELEPHANT DOING A MOVEMENT.
+   So he takes the middle of the screen at full height, the self-view is
+   demoted to a corner (a two-year-old will watch themselves forever, and while
+   they are doing that they are not stomping), and the only other things on
+   screen are the line the grown-up echoes and the grown-ups' strip.
+
+   THE MOVEMENT ANIMATIONS BELOW ARE THE FLOOR, NOT THE CEILING. The rig is
+   growing a `perform()` of its own; until it lands — and on any device where
+   it does nothing — these keyframes are what actually makes Chiku stomp, sway
+   and jump, and a child copying a CSS keyframe is copying an elephant just as
+   well. They are keyed off `data-move` on the host, which the surface sets to
+   the movement being demonstrated and to "watching" the rest of the time.
+
+   Every one of them is BIG AND SLOW. An elephant is heavy, and — more to the
+   point — a movement performed at adult speed is a movement a two-year-old
+   watches instead of copies. */
+
+.toddler {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2vmin, 22px);
+  padding: clamp(12px, 2.5vmin, 28px);
+  padding-bottom: max(clamp(12px, 2.5vmin, 28px), env(safe-area-inset-bottom));
+}
+
+.toddler-stage {
+  position: relative;
+  width: min(92vw, 560px, calc(62vh * 3 / 4));
+  aspect-ratio: 3 / 4;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+/* Chiku, whole and standing, filling the stage. `transform-origin` is his FEET
+   so that every movement below pivots where an animal's weight actually is. */
+/* MOVEMENT LIVES IN THE RIG, NOT HERE.
+   Two implementations of Chiku's exercises were written in parallel: CSS
+   keyframes on this host element, and `rig.perform()` inside the SVG. Both
+   fired, so every jump was roughly twice as high as designed with two eases
+   fighting. The rig version won because it can lift ONE leg at a time and
+   swing the trunk independently — an elephant stomp is legs, and a host-element
+   transform cannot do legs. It also holds a static, legible pose under
+   prefers-reduced-motion, which a CSS animation cannot.
+   `data-move` stays on the element as a state hook for layout and tests. */
+.toddler-chiku {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 8px 12px rgb(44 42 53 / 22%));
+  transform-origin: 50% 100%;
+}
+
+/* The self-view is a corner sticker, and only readable once a grown-up has
+   switched the camera on. Faded rather than removed: a hidden <video> is
+   allowed to stop producing frames, which would silently starve the tracker. */
+.toddler-selfie {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 26%;
+  aspect-ratio: 4 / 3;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #e7dcc8;
+  opacity: 0;
+  transition: opacity 240ms ease-out;
+}
+
+.toddler-stage.has-camera .toddler-selfie {
+  opacity: 1;
+  box-shadow: 0 3px 0 #e2d3b6;
+}
+
+/* Teal is reserved for "Chiku is attending to you" (§9) and means exactly that
+   here too — it is on the self-view frame, never on Chiku. */
+.toddler-stage.is-attending .toddler-selfie {
+  box-shadow:
+    0 0 0 4px var(--kid-teal),
+    0 3px 0 #e2d3b6;
+}
+
+.toddler-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirrored: a child raising their right hand must see it on their right. */
+  transform: scaleX(-1);
+}
+
+.toddler .stage-cue {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+}
+
+/* --- the movements -------------------------------------------------------- */
+
+/* Weight down through one side and then the other: an elephant foot landing. */
+/* A small squash on the beat — the clap is in the arms, which the rig owns, so
+   this is the body's part of it and nothing more. */
+/* The trunk swings: the whole body leans with it, because a toddler copies the
+   BIG motion long before they copy the limb. */
+/* --- the words ------------------------------------------------------------ */
+
+.toddler-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  max-width: min(92vw, 640px);
+}
+
+/* The invitation. Written for the GROWN-UP to echo — the child cannot read it
+   — so it is large enough to be caught at a glance from across a room and
+   never long enough to be a paragraph. */
+.toddler-invite {
+  margin: 0;
+  font-size: clamp(20px, 3.4vmin, 32px);
+  font-weight: 700;
+  color: var(--kid-ink);
+}
+
+.toddler-bye {
+  margin: 0;
+  font-size: clamp(24px, 4.4vmin, 40px);
+  font-weight: 800;
+  color: var(--kid-ink);
+}
+
+/* THE DELIGHT ESCALATES. Same movement, bigger reaction, every go — which is
+   the entire reason repetition works at this age: the child is running the
+   experiment "does he do it MORE if I do it again?", and the answer has to be
+   yes. `data-cheer` is the repetition index. */
+.toddler-cheer {
+  margin: 0;
+  font-weight: 800;
+  color: var(--kid-leaf);
+  font-size: clamp(26px, 5vmin, 46px);
+  animation: cheer-pop 420ms cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+.toddler-cheer[data-cheer="1"] {
+  font-size: clamp(28px, 5.6vmin, 52px);
+}
+
+.toddler-cheer[data-cheer="2"] {
+  font-size: clamp(30px, 6.2vmin, 58px);
+  color: var(--kid-chiku-dark);
+}
+
+.toddler-cheer[data-cheer="3"] {
+  font-size: clamp(32px, 6.8vmin, 64px);
+  color: var(--kid-rose);
+}
+
+@keyframes cheer-pop {
+  0% {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* --- the grown-ups' strip ------------------------------------------------- */
+
+.toddler-grownups {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: min(94vw, 560px);
+}
+
+/* Deliberately small and low-contrast: it is not in the child's way, it is
+   read once by the adult in the room, and the surface stops rendering it after
+   the first celebration. */
+.toddler-grownup-line {
+  margin: 0;
+  max-width: 46ch;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.45;
+  text-align: center;
+  color: var(--color-neutral-600);
+}
+
+.toddler-grownup-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.toddler-grownup-row .live-quiet {
+  font-size: 15px;
+  min-height: 48px;
+  padding: 8px 18px;
+}
+
+/* Landscape phones: the stage is the first thing that has to give, and the
+   grown-up line is the first thing that may wrap away. */
+@media (orientation: landscape) and (max-height: 560px) {
+  .toddler {
+    flex-direction: row;
+    gap: clamp(10px, 2vw, 24px);
+  }
+
+  .toddler-stage {
+    width: min(46vw, calc(84vh * 3 / 4));
+  }
+
+  .toddler-panel,
+  .toddler-grownups {
+    max-width: 44vw;
+  }
+}
+
+/* Reduced motion: the global rule at the top of this file already kills every
+   animation, which would leave Chiku a statue with nothing to copy. So under
+   `is-still` the movement is expressed as a STATIC POSE instead — he is
+   visibly leaning, crouched or reaching, and he changes pose per movement.
+   Copying a pose is a poorer game than copying a motion, but it is a game;
+   copying nothing is not. */
+.toddler-stage.is-still .toddler-stage.is-still .toddler-stage.is-still .toddler-stage.is-still .toddler-stage.is-still .toddler-stage.is-still .toddler-stage.is-still 

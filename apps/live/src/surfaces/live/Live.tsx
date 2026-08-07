@@ -240,9 +240,20 @@ export interface LiveProps {
   rigFactory?: RigFactory;
   /** Test seam — drives target and order randomisation. */
   random?: () => number;
+  /**
+   * Leave for TODDLER MODE — the copy-Chiku loop for children below this
+   * surface's 3-8 band (see surfaces/toddler/Toddler.tsx).
+   *
+   * Optional, and the second welcome button exists only when it is supplied,
+   * so `Live` mounted on its own is exactly the screen it has always been.
+   * The choice belongs to a grown-up: nothing about this surface can tell how
+   * old the child in front of it is, and guessing wrong in either direction is
+   * worse than a second button.
+   */
+  onToddlerMode?: () => void;
 }
 
-export function Live({ rigFactory, random = Math.random }: LiveProps) {
+export function Live({ rigFactory, random = Math.random, onToddlerMode }: LiveProps) {
   const { lang, other, tIn } = useI18n();
   const reducedMotion = useReducedMotion();
 
@@ -1399,6 +1410,13 @@ export function Live({ rigFactory, random = Math.random }: LiveProps) {
               <Bilingual k="welcome.greeting" />
             </h1>
             <BigButton k="welcome.begin" onClick={begin} />
+            {/* The other room. One marigold action per screen is the design
+                rule, so this is the sand alternative — quieter than "Let's
+                play!", and it is meant to be: the child reaches for the gold
+                one, the grown-up reads this one. */}
+            {onToddlerMode && (
+              <BigButton k="toddler.enter" tone="quiet" onClick={onToddlerMode} />
+            )}
           </>
         )}
 

@@ -911,6 +911,7 @@ function makeRigSpy(): RigSpy {
       setMouthOpen() {},
       setAttention() {},
       blink() {},
+      perform: () => Promise.resolve(),
       debug: () => ({ gazeX: 0, gazeY: 0, mouthOpen: 0, emote: "idle" as Emote }),
       dispose() {
         node.remove();

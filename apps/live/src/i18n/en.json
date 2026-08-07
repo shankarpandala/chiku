@@ -123,5 +123,22 @@
   "choice.peekaboo.hiding": "The hidden face",
   "choice.peekaboo.peek": "The peeking face",
   "demo.peekaboo.hide": "Chiku is hiding…",
-  "demo.peekaboo.peek": "Peekaboo! Here I am!"
+  "demo.peekaboo.peek": "Peekaboo! Here I am!",
+  "toddler.enter": "For little ones — copy Chiku!",
+  "toddler.exit": "Grown-ups: hold to go back",
+  "toddler.watch": "Let Chiku watch too",
+  "toddler.grownup": "Grown-ups: stand up and copy Chiku with them. At this age you joining in is worth more than anything the camera can see.",
+  "toddler.move.clap": "Clap, clap, clap with Chiku!",
+  "toddler.move.stomp": "Big elephant feet! Stomp, stomp, stomp!",
+  "toddler.move.swing": "Swing your trunk! Swish… swish…",
+  "toddler.move.reach": "Uuup tall! Big tall elephant!",
+  "toddler.move.sway": "This way… and that way… sway with Chiku!",
+  "toddler.move.crouch": "Down, down, down — teeny tiny elephant!",
+  "toddler.move.jump": "Jump, jump, jump with Chiku!",
+  "toddler.cheer.one": "Yes! You did it with Chiku!",
+  "toddler.cheer.two": "Again! Chiku loves that!",
+  "toddler.cheer.three": "Woooo! Look at you go!",
+  "toddler.cheer.four": "Yaaay! Chiku is so happy!",
+  "toddler.bye.title": "Bye bye! That was so much fun!",
+  "toddler.bye.line": "Chiku is having a little rest now. Come and dance again soon!"
 }
