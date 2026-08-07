@@ -59,6 +59,217 @@ const HALFLIFE_GAZE = 90;
 const HALFLIFE_POSE = 160;
 const HALFLIFE_MOUTH = 45;
 
+/* -------------------------------------------------------------------------- */
+/* Demonstration beats — Chiku doing the exercise                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A movement Chiku can DO, so a child can copy it.
+ *
+ * IMITATION IS THE INSTRUCTION. The youngest child this rig has to serve is
+ * pre-verbal: nothing may depend on them hearing a word, reading one, or
+ * understanding a request. The only instruction that works is Chiku performing
+ * the movement himself, big enough and slow enough to be read and copied.
+ *
+ * The union deliberately matches the vision layer's `MovementKind` name for
+ * name, so "what Chiku did" and "what the child did" are the same vocabulary.
+ * It is restated rather than imported because this package is framework- and
+ * app-agnostic and must not depend on apps/live.
+ */
+export type PerformMove = "jump" | "stomp" | "crouch" | "sway" | "reach" | "clap" | "swing";
+
+/**
+ * A keyframe track: `[progress 0..1, value]`, eased between adjacent keys.
+ *
+ * Keys, not formulas, because the shape of each beat is a choreography
+ * decision — where the anticipation sits, how long the hold is — and it should
+ * be legible as one line of numbers rather than buried in trigonometry.
+ */
+type Track = ReadonlyArray<readonly [at: number, value: number]>;
+
+/** Smootherstep between keys: no corners, which is what reads as weight. */
+function easeInOut(p: number): number {
+  return p * p * (3 - 2 * p);
+}
+
+/** Value of a track at progress `p`. Tracks outside their range hold the end. */
+function sampleTrack(track: Track, p: number): number {
+  const first = track[0];
+  if (first === undefined) return 0;
+  if (p <= first[0]) return first[1];
+  let prev = first;
+  for (let i = 1; i < track.length; i += 1) {
+    const key = track[i];
+    if (key === undefined) break;
+    if (p <= key[0]) {
+      const span = key[0] - prev[0];
+      const local = span <= 0 ? 1 : easeInOut((p - prev[0]) / span);
+      return prev[1] + (key[1] - prev[1]) * local;
+    }
+    prev = key;
+  }
+  return prev[1];
+}
+
+/**
+ * One beat of choreography.
+ *
+ * ELEPHANT RULES, which are also 2-year-old rules:
+ *   - BIG. Amplitudes are a large fraction of the figure, not a nudge. A
+ *     toddler copies a silhouette, not a detail.
+ *   - SLOW. Every beat is over a second. Faster than that and they have not
+ *     finished looking at it before it is gone.
+ *   - ANTICIPATION. Every move begins with a small counter-movement — dip
+ *     before rising, rise before dipping, lean away before leaning in. That
+ *     counter-movement is what makes the move read as deliberate rather than a
+ *     glitch, and it is also, conveniently, a warning that something is about
+ *     to happen, which is how a small child gets time to look.
+ *   - LAND HEAVY. Weight is sold on the way down: squash, then settle.
+ */
+interface MoveSpec {
+  readonly durationMs: number;
+  /** Whole-figure translation, viewBox units. Negative y is up. */
+  readonly dx?: Track;
+  readonly dy?: Track;
+  /** Vertical scale about the feet; width compensates, so mass is conserved. */
+  readonly squash?: Track;
+  /** Whole-body lean, degrees, about the feet. */
+  readonly lean?: Track;
+  /** Extra trunk rotation, degrees, on top of the idle sway follow-through. */
+  readonly trunk?: Track;
+  /** Trunk path override for the whole beat (null → whatever the emote wants). */
+  readonly trunkPose?: TrunkPose;
+  /** Leg lift, viewBox units up from the hip. Only visible with `showBody`. */
+  readonly legL?: Track;
+  readonly legR?: Track;
+  /** Ear flap, degrees, mirrored L/R. */
+  readonly ears?: Track;
+  /**
+   * The progress a reduced-motion viewer is held at: the single frame that
+   * most says what the movement is. Chiku holds this pose instead of moving.
+   */
+  readonly hold: number;
+}
+
+const MOVES: Record<PerformMove, MoveSpec> = {
+  // Sink, spring, hang, land heavy, settle.
+  jump: {
+    durationMs: 1500,
+    hold: 0.5,
+    dy: [[0, 0], [0.3, 16], [0.42, -20], [0.52, -54], [0.62, -20], [0.74, 12], [0.88, -3], [1, 0]],
+    squash: [[0, 1], [0.3, 0.88], [0.42, 1.1], [0.62, 1.06], [0.74, 0.86], [0.88, 1.03], [1, 1]],
+    ears: [[0, 0], [0.3, -4], [0.52, 14], [0.74, -8], [1, 0]],
+    trunk: [[0, 0], [0.3, 5], [0.52, -12], [0.78, 6], [1, 0]],
+  },
+  // Two of them, because one stomp is an event and two is a rhythm — and a
+  // rhythm is the thing a 2-year-old joins in with.
+  stomp: {
+    durationMs: 2200,
+    hold: 0.2,
+    legR: [[0, 0], [0.16, 26], [0.3, 26], [0.38, 0], [1, 0]],
+    legL: [[0, 0], [0.58, 0], [0.66, 26], [0.8, 26], [0.88, 0], [1, 0]],
+    lean: [[0, 0], [0.16, -4], [0.38, 0], [0.66, 4], [0.88, 0], [1, 0]],
+    dy: [[0, 0], [0.16, -6], [0.38, 10], [0.5, 0], [0.66, -6], [0.88, 10], [1, 0]],
+    squash: [[0, 1], [0.38, 0.9], [0.5, 1], [0.88, 0.9], [1, 1]],
+    ears: [[0, 0], [0.38, 12], [0.52, 0], [0.88, 12], [1, 0]],
+  },
+  // Rise a little first (anticipation), then sink low and STAY there — the hold
+  // is the whole point, so a child has time to get down there too.
+  crouch: {
+    durationMs: 2400,
+    hold: 0.5,
+    dy: [[0, 0], [0.14, -8], [0.36, 34], [0.72, 34], [0.92, -4], [1, 0]],
+    squash: [[0, 1], [0.14, 1.05], [0.36, 0.74], [0.72, 0.74], [0.92, 1.04], [1, 1]],
+    trunk: [[0, 0], [0.36, 10], [0.72, 10], [1, 0]],
+    ears: [[0, 0], [0.36, 8], [0.72, 8], [1, 0]],
+  },
+  // Lean away, then a long metronome the child can fall into step with.
+  sway: {
+    durationMs: 2800,
+    hold: 0.3,
+    lean: [[0, 0], [0.1, 3], [0.3, -11], [0.55, 11], [0.8, -11], [0.94, 3], [1, 0]],
+    dx: [[0, 0], [0.1, 5], [0.3, -20], [0.55, 20], [0.8, -20], [0.94, 5], [1, 0]],
+    ears: [[0, 0], [0.3, -12], [0.55, 12], [0.8, -12], [1, 0]],
+    trunk: [[0, 0], [0.3, 14], [0.55, -14], [0.8, 14], [1, 0]],
+  },
+  // Dip, then stretch tall with the trunk lifted, and HOLD it up there.
+  reach: {
+    durationMs: 2000,
+    hold: 0.55,
+    trunkPose: "lift",
+    dy: [[0, 0], [0.18, 14], [0.42, -26], [0.72, -26], [0.92, 4], [1, 0]],
+    squash: [[0, 1], [0.18, 0.9], [0.42, 1.12], [0.72, 1.12], [0.92, 0.97], [1, 1]],
+    trunk: [[0, 0], [0.18, 6], [0.42, -26], [0.72, -26], [1, 0]],
+    ears: [[0, 0], [0.42, -10], [0.72, -10], [1, 0]],
+  },
+  // Chiku has no hands, so he claps with what he has: both ears swinging in
+  // together, twice, with a bob on each beat. It is the RHYTHM that a toddler
+  // copies with their hands, not the anatomy.
+  clap: {
+    durationMs: 1800,
+    hold: 0.28,
+    ears: [[0, 0], [0.12, -10], [0.28, 22], [0.44, -6], [0.62, 22], [0.8, -4], [1, 0]],
+    dy: [[0, 0], [0.12, -6], [0.28, 8], [0.44, 0], [0.62, 8], [0.8, 0], [1, 0]],
+    squash: [[0, 1], [0.28, 0.94], [0.44, 1], [0.62, 0.94], [1, 1]],
+    trunk: [[0, 0], [0.28, -8], [0.62, -8], [1, 0]],
+  },
+  // The trunk itself, swinging. The body counter-rotates a little, which is
+  // what stops it looking like a windscreen wiper bolted to a statue.
+  swing: {
+    durationMs: 2600,
+    hold: 0.32,
+    trunkPose: "wave",
+    trunk: [[0, 0], [0.1, -8], [0.32, 30], [0.56, -30], [0.8, 30], [0.94, -6], [1, 0]],
+    lean: [[0, 0], [0.32, -3], [0.56, 3], [0.8, -3], [1, 0]],
+    dx: [[0, 0], [0.32, -6], [0.56, 6], [0.8, -6], [1, 0]],
+    ears: [[0, 0], [0.32, 8], [0.56, -8], [0.8, 8], [1, 0]],
+  },
+};
+
+/** Everything a beat can move, resolved for one instant. */
+interface PerformPose {
+  readonly dx: number;
+  readonly dy: number;
+  readonly squash: number;
+  readonly lean: number;
+  readonly trunk: number;
+  readonly legL: number;
+  readonly legR: number;
+  readonly ears: number;
+}
+
+const REST_POSE: PerformPose = { dx: 0, dy: 0, squash: 1, lean: 0, trunk: 0, legL: 0, legR: 0, ears: 0 };
+
+function poseAt(spec: MoveSpec, p: number): PerformPose {
+  return {
+    dx: spec.dx === undefined ? 0 : sampleTrack(spec.dx, p),
+    dy: spec.dy === undefined ? 0 : sampleTrack(spec.dy, p),
+    squash: spec.squash === undefined ? 1 : sampleTrack(spec.squash, p),
+    lean: spec.lean === undefined ? 0 : sampleTrack(spec.lean, p),
+    trunk: spec.trunk === undefined ? 0 : sampleTrack(spec.trunk, p),
+    legL: spec.legL === undefined ? 0 : sampleTrack(spec.legL, p),
+    legR: spec.legR === undefined ? 0 : sampleTrack(spec.legR, p),
+    ears: spec.ears === undefined ? 0 : sampleTrack(spec.ears, p),
+  };
+}
+
+function isResting(pose: PerformPose): boolean {
+  return (
+    pose.dx === 0 &&
+    pose.dy === 0 &&
+    pose.squash === 1 &&
+    pose.lean === 0 &&
+    pose.trunk === 0 &&
+    pose.legL === 0 &&
+    pose.legR === 0 &&
+    pose.ears === 0
+  );
+}
+
+/** Where the body pivots when it squashes and leans: the floor under his feet. */
+const FLOOR_Y_BODY = 340;
+const FLOOR_Y_HEAD = 236;
+
 /** Numeric restatement of the per-emote pose values in data.ts EMOTES. */
 interface NumericPose {
   readonly tiltDeg: number;
@@ -116,8 +327,45 @@ export interface LiveRig {
   setAttention(on: boolean): void;
   /** Force a blink now (auto-blink continues on its own schedule). */
   blink(): void;
+  /**
+   * Chiku DOES the movement, so the child can copy it. Resolves when the beat
+   * finishes.
+   *
+   * This is the instruction channel for a pre-verbal child: there is no word to
+   * say, no button to find, nothing to understand. He jumps; they jump. Call it
+   * again for the same move and he does it again — at two years old repetition
+   * is not a fallback, it is the thing they came for.
+   *
+   * A new call INTERRUPTS the one in flight and resolves its promise (never
+   * rejects), exactly like `speak()` — so a caller awaiting the old beat is
+   * released rather than left hanging.
+   *
+   * Under `reducedMotion` he holds the move's most legible frame instead of
+   * animating, and the promise resolves immediately: there is no motion, so
+   * there is no duration to wait out. A caller sequencing beats should pace
+   * itself rather than assume this call takes time.
+   *
+   * Legs and feet only exist when the rig was built with `showBody`. Without a
+   * body a stomp is still a stomp — the whole figure carries it — but it reads
+   * better with legs, so prefer `showBody` on any surface that demonstrates.
+   */
+  perform(move: PerformMove): Promise<void>;
   /** Current smoothed values — for tests and debug overlays. */
-  debug(): { gazeX: number; gazeY: number; mouthOpen: number; emote: Emote };
+  debug(): {
+    gazeX: number;
+    gazeY: number;
+    mouthOpen: number;
+    emote: Emote;
+    /**
+     * The beat in flight, or null when he is not demonstrating anything.
+     *
+     * Optional only so the stand-in rigs in existing tests keep compiling; the
+     * real rig always reports it.
+     */
+    performing?: PerformMove | null;
+    /** …and how far through it, 0..1. Optional for the same reason. */
+    performProgress?: number;
+  };
   dispose(): void;
 }
 
@@ -179,13 +427,25 @@ export function createLiveRig(host: HTMLElement, opts: LiveRigOptions = {}): Liv
   );
   figure.append(earL, earR);
 
+  // Legs live in their own groups so a stomp can lift ONE of them. Same nodes,
+  // same paint order (legs under the torso ellipse) — only the nesting changed.
+  let legL: SVGGElement | null = null;
+  let legR: SVGGElement | null = null;
   if (showBody) {
     const body = el(doc, "g", { "data-part": "body" });
-    body.append(
+    legL = el(doc, "g", { "data-part": "legL", style: "transform-origin:97px 292px" });
+    legL.append(
       el(doc, "rect", { x: "82", y: "290", width: "30", height: "48", rx: "15", fill: PALETTE.bodyShade }),
-      el(doc, "rect", { x: "128", y: "290", width: "30", height: "48", rx: "15", fill: PALETTE.bodyShade }),
       el(doc, "ellipse", { cx: "97", cy: "338", rx: "19", ry: "11", fill: PALETTE.bodyLight }),
+    );
+    legR = el(doc, "g", { "data-part": "legR", style: "transform-origin:143px 292px" });
+    legR.append(
+      el(doc, "rect", { x: "128", y: "290", width: "30", height: "48", rx: "15", fill: PALETTE.bodyShade }),
       el(doc, "ellipse", { cx: "143", cy: "338", rx: "19", ry: "11", fill: PALETTE.bodyLight }),
+    );
+    body.append(
+      legL,
+      legR,
       el(doc, "ellipse", { cx: "120", cy: "252", rx: "68", ry: "64", fill: PALETTE.body }),
       el(doc, "ellipse", { cx: "120", cy: "268", rx: "41", ry: "40", fill: PALETTE.bodyLight }),
     );
@@ -290,6 +550,35 @@ export function createLiveRig(host: HTMLElement, opts: LiveRigOptions = {}): Liv
   let lastFrame = now();
   let handle: number | null = null;
 
+  /* ---- demonstration beats ---- */
+
+  interface Beat {
+    readonly move: PerformMove;
+    readonly spec: MoveSpec;
+    /** Null until the first painted frame, so the beat starts when it is seen. */
+    startedAt: number | null;
+    resolve: () => void;
+  }
+  let beat: Beat | null = null;
+  /** The reduced-motion held pose, which outlives any single frame. */
+  let heldPose: PerformPose | null = null;
+  /** Trunk path the current beat wants, overriding the emote's. */
+  let trunkPoseOverride: TrunkPose | null = null;
+  /** Base values from the last paint, so a held pose can be written outside it. */
+  let baseHeadDeg = 0;
+  let baseSway = 0;
+  let baseBreath = 1;
+
+  const floorY = showBody ? FLOOR_Y_BODY : FLOOR_Y_HEAD;
+
+  function applyTrunkPaths(): void {
+    const pose3 = TRUNKS[trunkPoseOverride ?? (EMOTES[emote].trunk as TrunkPose)];
+    trunkPaths.forEach((node, i) => {
+      const seg = segOrder[i] ?? 0;
+      node.setAttribute("d", pose3[seg] ?? "");
+    });
+  }
+
   function applyEmoteTargets(): void {
     const pose = POSES[emote];
     const p = EMOTES[emote];
@@ -301,12 +590,75 @@ export function createLiveRig(host: HTMLElement, opts: LiveRigOptions = {}): Liv
     target.arc = p.eyes === "happy" ? 1 : 0;
     browL.setAttribute("d", p.browL);
     browR.setAttribute("d", p.browR);
-    const pose3 = TRUNKS[p.trunk as TrunkPose];
-    trunkPaths.forEach((node, i) => {
-      const seg = segOrder[i] ?? 0;
-      node.setAttribute("d", pose3[seg] ?? "");
-    });
+    applyTrunkPaths();
     root.setAttribute("data-emote", emote);
+  }
+
+  /**
+   * Resolve the beat in flight without rejecting. Interruption is normal — a
+   * child who has moved on deserves Chiku to move on too — so the awaiting
+   * caller is released, not failed.
+   */
+  function endBeat(): void {
+    const done = beat;
+    beat = null;
+    if (done === null) return;
+    if (trunkPoseOverride !== null) {
+      trunkPoseOverride = null;
+      applyTrunkPaths();
+    }
+    root.removeAttribute("data-perform");
+    done.resolve();
+  }
+
+  /**
+   * Write everything a beat touches. Split out of `paint` so a reduced-motion
+   * hold can be applied without running a frame of breathing, blinking and
+   * saccades — the static pose has to stay static.
+   */
+  function writePerformance(perf: PerformPose): void {
+    const resting = isResting(perf);
+    // Squash conserves apparent mass: shorter is wider. Anchored at the floor,
+    // so he compresses onto his feet instead of shrinking toward his middle.
+    const sy = perf.squash;
+    const sx = sy === 0 ? 1 : 1 / Math.sqrt(sy);
+    const headDeg = baseHeadDeg;
+    const bodyTransform =
+      `translate(120 170) rotate(${headDeg.toFixed(3)}) scale(${baseBreath.toFixed(4)}) translate(-120 -170)`;
+    figure.setAttribute(
+      "transform",
+      resting
+        ? bodyTransform
+        : `translate(${perf.dx.toFixed(2)} ${perf.dy.toFixed(2)}) ` +
+          `translate(120 ${floorY}) rotate(${perf.lean.toFixed(3)}) ` +
+          `scale(${sx.toFixed(4)} ${sy.toFixed(4)}) translate(-120 ${-floorY}) ` +
+          bodyTransform,
+    );
+
+    // Ears mirror: +flap on the left, -flap on the right, so they swing IN
+    // together rather than both drifting the same way across the face.
+    earL.setAttribute(
+      "transform",
+      `rotate(${(cur.earL - baseSway * 0.6 + perf.ears).toFixed(2)}) scale(${cur.earLScale.toFixed(3)})`,
+    );
+    earR.setAttribute("transform", `rotate(${(cur.earR + baseSway * 0.6 - perf.ears).toFixed(2)})`);
+    trunkG.setAttribute("transform", `rotate(${(baseSway * -1.4 + perf.trunk).toFixed(2)})`);
+
+    if (legL !== null) legL.setAttribute("transform", `translate(0 ${(-perf.legL).toFixed(2)})`);
+    if (legR !== null) legR.setAttribute("transform", `translate(0 ${(-perf.legR).toFixed(2)})`);
+  }
+
+  /** The pose to draw this instant: the live beat, else any hold, else rest. */
+  function currentPerformPose(t: number): PerformPose {
+    const b = beat;
+    if (b === null) return heldPose ?? REST_POSE;
+    if (b.startedAt === null) b.startedAt = t;
+    const p = (t - b.startedAt) / b.spec.durationMs;
+    if (p >= 1) {
+      endBeat();
+      return REST_POSE;
+    }
+    return poseAt(b.spec, p < 0 ? 0 : p);
   }
 
   function currentViseme(): Viseme {
@@ -387,17 +739,14 @@ export function createLiveRig(host: HTMLElement, opts: LiveRigOptions = {}): Liv
     const sway =
       Math.sin((t / 1000) * SWAY_HZ * Math.PI * 2) * SWAY_DEG +
       Math.sin((t / 1000) * SWAY_HZ2 * Math.PI * 2) * SWAY_DEG2;
-    const headDeg = cur.tilt + sway + cur.gazeX * GAZE_HEAD_DEG;
-    const scale = 1 + breath * BREATH_SCALE;
-    figure.setAttribute(
-      "transform",
-      `translate(120 170) rotate(${headDeg.toFixed(3)}) scale(${scale.toFixed(4)}) translate(-120 -170)`,
-    );
+    baseHeadDeg = cur.tilt + sway + cur.gazeX * GAZE_HEAD_DEG;
+    baseSway = sway;
+    baseBreath = 1 + breath * BREATH_SCALE;
 
-    // Ears lag the head — cheap follow-through that reads as weight.
-    earL.setAttribute("transform", `rotate(${(cur.earL - sway * 0.6).toFixed(2)}) scale(${cur.earLScale.toFixed(3)})`);
-    earR.setAttribute("transform", `rotate(${(cur.earR + sway * 0.6).toFixed(2)})`);
-    trunkG.setAttribute("transform", `rotate(${(sway * -1.4).toFixed(2)})`);
+    // Ear follow-through, trunk sway and the figure transform all live in
+    // writePerformance now, because a demonstration beat composes on top of
+    // exactly those three and they must be written from one place.
+    writePerformance(currentPerformPose(t));
     blush.setAttribute("opacity", String(cur.blush.toFixed(3)));
   }
 
@@ -458,12 +807,55 @@ export function createLiveRig(host: HTMLElement, opts: LiveRigOptions = {}): Liv
     blink(): void {
       blinkClosedUntil = now() + BLINK_CLOSED_MS;
     },
+    perform(move: PerformMove): Promise<void> {
+      if (disposed) return Promise.resolve();
+      const spec = MOVES[move];
+      // Interrupt first, so the outgoing promise is settled before the new beat
+      // can possibly finish and settle its own.
+      endBeat();
+
+      if (reducedMotion) {
+        // No motion at all: hold the frame that best says what the move is, and
+        // resolve now — there is nothing to wait for. Chiku stays in the pose
+        // until the next perform(), which is a demonstration a child can look
+        // at for as long as they need.
+        trunkPoseOverride = spec.trunkPose ?? null;
+        applyTrunkPaths();
+        heldPose = poseAt(spec, spec.hold);
+        root.setAttribute("data-perform", move);
+        writePerformance(heldPose);
+        return Promise.resolve();
+      }
+
+      heldPose = null;
+      trunkPoseOverride = spec.trunkPose ?? null;
+      applyTrunkPaths();
+      root.setAttribute("data-perform", move);
+      return new Promise<void>((resolve) => {
+        beat = { move, spec, startedAt: null, resolve };
+      });
+    },
     debug() {
-      return { gazeX: cur.gazeX, gazeY: cur.gazeY, mouthOpen: cur.mouthOpen, emote };
+      const b = beat;
+      const started = b?.startedAt;
+      const progress =
+        b === null || started === null || started === undefined
+          ? 0
+          : Math.max(0, Math.min(1, (lastFrame - started) / b.spec.durationMs));
+      return {
+        gazeX: cur.gazeX,
+        gazeY: cur.gazeY,
+        mouthOpen: cur.mouthOpen,
+        emote,
+        performing: b?.move ?? null,
+        performProgress: progress,
+      };
     },
     dispose(): void {
       if (disposed) return;
       disposed = true;
+      // Release anyone awaiting a beat that will now never finish.
+      endBeat();
       if (handle !== null) cancelRaf(handle);
       handle = null;
       root.remove();

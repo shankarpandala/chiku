@@ -9,6 +9,7 @@
 export type {
   FaceSignal,
   HandSignal,
+  MovementSignal,
   VisionEngine,
   VisionFrame,
   VisionStatus,
@@ -74,6 +75,15 @@ export {
   type Corners,
   type HandLandmarks,
 } from "./quad-detect";
+
+export {
+  MOVEMENT,
+  MOVEMENT_WINDOW_MS,
+  MovementDetector,
+  countReversals,
+  type MovementKind,
+  type MovementSample,
+} from "./movement";
 
 export {
   WAVE_MIN_DIRECTION_CHANGES,

@@ -7,6 +7,7 @@
 // only thing that ever leaves `vision/` is the small structured summary below.
 
 import type { VisionCalibration } from "./calibration";
+import type { MovementKind } from "./movement";
 import type { Quad } from "./quad";
 
 /** Normalized gaze/attention derived from the face. */
@@ -34,6 +35,56 @@ export interface HandSignal {
   /** Wrist position, normalized 0..1 in image space. */
   wrist: { x: number; y: number };
 }
+
+/**
+ * Whole-body movement seen this frame, as plain booleans.
+ *
+ * Booleans and not the detector, deliberately: an activity stays a pure
+ * predicate over one frame, so it can be tested from a hand-built literal and
+ * can never accidentally hold on to rolling state that outlives a round.
+ *
+ * Each flag LATCHES for ~1.2s after the movement ends (see `MovementDetector`).
+ * A 2-year-old's jump is over before the next inference lands; if the flag went
+ * false the instant they touched down, the celebration would be cut off — or
+ * never start — and the child would not connect the reaction to their own body.
+ *
+ * NONE OF THESE IS A SCORE. There is no threshold to pass and no failure state
+ * anywhere downstream of them: they say "this happened", never "this was good
+ * enough".
+ */
+export interface MovementSignal {
+  /** Face rose sharply and came back down — a toddler hop counts. */
+  readonly jump: boolean;
+  /** Face dropped and stayed down long enough to be a deliberate crouch. */
+  readonly crouch: boolean;
+  /** Body oscillating side to side, real direction changes rather than wobble. */
+  readonly sway: boolean;
+  /** Rhythmic vertical bounce — the elephant stomp. */
+  readonly stomp: boolean;
+  /** A hand held above the head. */
+  readonly reach: boolean;
+  /** Wrists came together. */
+  readonly clap: boolean;
+  /** One arm swinging horizontally, trunk-style. */
+  readonly swing: boolean;
+  /**
+   * Any of the above. The "they are doing SOMETHING" signal — which at this age
+   * is the one that most deserves a reaction, because the child is not copying
+   * an instruction they understood, they are moving because Chiku moved.
+   */
+  readonly any: boolean;
+}
+
+/**
+ * Compile-time guard: every `MovementKind` has a field on `MovementSignal`.
+ * Add a kind to the detector without adding it here and this alias stops
+ * compiling, rather than the flag silently never reaching an activity.
+ */
+type Assert<T extends true> = T;
+type MovementSignalIsComplete = Assert<
+  [Exclude<MovementKind, keyof MovementSignal>] extends [never] ? true : false
+>;
+export type { MovementSignalIsComplete };
 
 export interface VisionFrame {
   /** Milliseconds, from the vision clock. */
@@ -99,6 +150,25 @@ export interface VisionFrame {
    * pixels it was derived from lived for one paint (§9).
    */
   windowCoverage?: number;
+  /**
+   * Whole-body movement by the PRIMARY person — jumping, crouching, swaying,
+   * stomping, reaching, clapping, swinging an arm. See `MovementSignal`.
+   *
+   * Derived from the face and wrists we already track, not from a pose model:
+   * see the header of `vision/movement.ts` for why that trade is the right one
+   * on a device the loop already throttles to 4-6fps.
+   *
+   * PRIMARY PERSON ONLY, like `totalFingers` and `quad` — a sibling bouncing
+   * past the camera must not make the child's Chiku celebrate a jump the child
+   * did not do. At this age that is not a scoring error, it is worse: the
+   * reaction stops being contingent on their own body, which is the entire
+   * thing the loop is teaching.
+   *
+   * Undefined until the detector has a few frames of history (and on any frame
+   * literal that predates this field). Read it as "no evidence", never as
+   * "they did not move" — there is no failure state here.
+   */
+  movement?: MovementSignal;
 }
 
 export type VisionStatus =

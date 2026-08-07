@@ -57,7 +57,7 @@
 
 import type { Category, NormalizedLandmark } from "@mediapipe/tasks-vision";
 
-import type { HandSignal, VisionEngine, VisionFrame, VisionStatus } from "./types";
+import type { HandSignal, MovementSignal, VisionEngine, VisionFrame, VisionStatus } from "./types";
 import {
   ADULT_THRESHOLDS,
   countExtendedFingers,
@@ -65,6 +65,7 @@ import {
   type FingerThresholds,
   type Landmark,
 } from "./fingers";
+import { MovementDetector } from "./movement";
 import { QuadDetector, type HandLandmarks } from "./quad-detect";
 import { faceBounds, faceCentre, faceToGaze, type BlendshapeCategory } from "./gaze";
 import { WaveTracker } from "./wave";
@@ -490,6 +491,17 @@ export class FrameReducer {
    * able to take the child's window away from them, or make one of their own.
    */
   readonly #quad = new QuadDetector();
+  /**
+   * Whole-body movement, fed the PRIMARY person's face and wrists and nobody
+   * else's — same rule as the finger count and the magic window, for a sharper
+   * reason. A 2-year-old is learning "I moved, and the elephant noticed"; a
+   * sibling bouncing through frame that makes Chiku celebrate teaches the
+   * opposite, that the screen reacts on its own. Contingency is the product.
+   *
+   * Free: no extra inference, no extra model. It reads the landmarks the loop
+   * already produced. See `vision/movement.ts`.
+   */
+  readonly #movement = new MovementDetector();
 
   reduce(
     t: number,
@@ -533,6 +545,20 @@ export class FrameReducer {
     // not restart the smoother when the child comes back.
     const centre = this.#gaze.update(face === null ? null : faceCentre(face.landmarks));
 
+    // Movement wants the RAW bounding-box centre, not the smoothed gaze point.
+    // The smoother's whole job is to refuse sudden jumps — which is exactly what
+    // a hop is. Feeding it the smoothed value would filter the signal out.
+    //
+    // A frame where the tracker lost them is pushed as a gap rather than
+    // skipped: the detector times its windows off the samples it holds, and
+    // silently dropping frames would stretch a 400ms crouch into a "held" one.
+    this.#movement.push({
+      t,
+      face: face === null ? null : face.centre,
+      wrists: primary.hands.map((h) => h.centre),
+    });
+    const movement = this.#movement.ready ? movementOf(this.#movement, t) : undefined;
+
     return {
       t,
       face: face === null ? null : faceToGaze(face.landmarks, face.blendshapes, centre),
@@ -541,6 +567,7 @@ export class FrameReducer {
       waving,
       facePresence,
       quad,
+      movement,
     };
   }
 
@@ -550,7 +577,22 @@ export class FrameReducer {
     this.#gaze.reset();
     this.#presence.reset();
     this.#quad.reset();
+    this.#movement.reset();
   }
+}
+
+/** The detector's latched state at `t`, flattened to the frame's booleans. */
+function movementOf(detector: MovementDetector, t: number): MovementSignal {
+  return {
+    jump: detector.saw("jump", t),
+    crouch: detector.saw("crouch", t),
+    sway: detector.saw("sway", t),
+    stomp: detector.saw("stomp", t),
+    reach: detector.saw("reach", t),
+    clap: detector.saw("clap", t),
+    swing: detector.saw("swing", t),
+    any: detector.sawAnything(t),
+  };
 }
 
 /* -------------------------------------------------------------------------- */
